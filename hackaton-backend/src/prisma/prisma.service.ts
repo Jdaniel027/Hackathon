@@ -22,12 +22,14 @@ export class PrismaService
 
   async onModuleInit(): Promise<void> {
     try {
-      await this.$connect();
-      this.logger.log('Conectado a PostgreSQL.');
+      // $connect es perezoso con driver adapters: forzamos una consulta trivial
+      // para verificar la conexión de verdad.
+      await this.$queryRaw`SELECT 1`;
+      this.logger.log('Conexión a PostgreSQL verificada.');
     } catch (error) {
       // No abortamos el arranque: /health debe poder responder aunque la BD esté caída.
-      this.logger.error(
-        'No se pudo conectar a PostgreSQL al iniciar.',
+      this.logger.warn(
+        'No se pudo verificar la conexión a PostgreSQL al iniciar; la API arranca igual.',
         error instanceof Error ? error.message : String(error),
       );
     }

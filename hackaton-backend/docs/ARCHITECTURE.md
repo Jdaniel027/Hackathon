@@ -26,8 +26,8 @@ Características del cimiento:
 
 | Capa | Tecnología |
 |------|------------|
-| Framework | NestJS 11 (Node.js + TypeScript) |
-| ORM | Prisma 6 (PostgreSQL) |
+| Framework | NestJS 12 (Node.js + TypeScript) |
+| ORM | Prisma 7 (PostgreSQL) |
 | Base de datos | PostgreSQL 15+ |
 | Autenticación usuarios | **Ninguna. La API es anónima.** |
 | Autenticación admin | Header `x-api-key` comparado contra `ADMIN_API_KEY` |
@@ -70,12 +70,14 @@ Gestor de paquetes: **pnpm**.
 ```
 hackaton-backend/
 ├── package.json · tsconfig.json · tsconfig.build.json · nest-cli.json
-├── eslint.config.mjs · .prettierrc · .gitignore
+├── .oxlintrc.json · .prettierrc · .prettierignore · .gitignore · pnpm-workspace.yaml
+├── prisma.config.ts           # Prisma 7: URL de conexión para el CLI (generate/migrate)
 ├── .env · .env.example
 ├── prisma/
 │   ├── schema.prisma          # modelos de IDEA.md §2
 │   └── seed.ts                # Pais → Estado → Municipio (Mazatlán) + ids SMN
 └── src/
+    ├── generated/prisma/      # cliente Prisma 7 (generado, git-ignored)
     ├── main.ts                # bootstrap + rawBody
     ├── app.module.ts          # Config, Throttler, Schedule, guard admin global
     ├── app.controller.ts      # GET /health
@@ -83,13 +85,14 @@ hackaton-backend/
     ├── bootstrap/
     │   └── configurar-app.ts  # prefijo /api/v1, CORS, pipe, filtro, Swagger
     ├── config/
+    │   ├── load-env.ts        # carga .env antes de evaluar decoradores
     │   └── env.schema.ts      # zod: DATABASE_URL, GEMINI_API_KEY, ADMIN_API_KEY, límites
     ├── prisma/
     │   ├── prisma.module.ts   # @Global
     │   └── prisma.service.ts
     ├── common/
     │   ├── decorators/
-    │   │   ├── admin-key.decorator.ts     # @Admin() → aplica el guard
+    │   │   ├── admin.decorator.ts         # @Admin() → aplica el guard
     │   │   └── rate-limit.decorator.ts    # @RateLimitEspecifico(limit, ttl)
     │   ├── guards/
     │   │   └── api-key.guard.ts           # global para rutas @Admin
