@@ -1,83 +1,78 @@
 import { useEffect } from "react";
-import { Marker, Popup } from "maplibre-gl";
+import { Marker } from "maplibre-gl";
 import type { Map } from "maplibre-gl";
 
-import type { FloodReport, FloodSeverity } from "../types/report";
-
-const SEVERITY_COLORS: Record<FloodSeverity, string> = {
-  low: "#16a34a",
-  medium: "#f59e0b",
-  high: "#dc2626",
-};
-
-const SEVERITY_LABELS: Record<FloodSeverity, string> = {
-  low: "Bajo",
-  medium: "Medio",
-  high: "Alto",
-};
-
-const dateFormatter = new Intl.DateTimeFormat("es-MX", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return Number.isNaN(date.getTime())
-    ? "Fecha no disponible"
-    : dateFormatter.format(date);
-}
+import type { FloodReport } from "../types/report";
+import { SEVERITY_COLORS, SEVERITY_LABELS } from "../lib/reportLabels";
 
 /**
- * Construye el contenido del popup con nodos DOM y `textContent`,
- * evitando `innerHTML`/`setHTML` para no inyectar texto de usuarios.
+ * Marcador circular propio (distinto de los polígonos de zona) con área táctil
+ * de 44px. El color codifica la severidad reportada, no un riesgo calculado.
  */
-function createPopupContent(report: FloodReport): HTMLElement {
-  const container = document.createElement("div");
-  container.className = "space-y-1 text-sm leading-snug text-slate-700";
+function createReportMarkerElement(report: FloodReport): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.setAttribute(
+    "aria-label",
+    `Reporte ciudadano, severidad ${SEVERITY_LABELS[report.severity].toLowerCase()}`,
+  );
+  element.className =
+    "flex h-11 w-11 cursor-pointer items-center justify-center";
 
-  const severity = document.createElement("p");
-  severity.className = "font-semibold text-slate-900";
-  severity.textContent = `Severidad: ${SEVERITY_LABELS[report.severity]}`;
+  const dot = document.createElement("span");
+  dot.className = "block h-4 w-4 rounded-full border-2 border-white shadow-md";
+  dot.style.backgroundColor = SEVERITY_COLORS[report.severity];
+  if (report.verificationStatus === "rejected") {
+    dot.style.opacity = "0.45";
+  }
 
-  const description = document.createElement("p");
-  description.textContent = report.description;
-
-  const date = document.createElement("p");
-  date.className = "text-xs text-slate-500";
-  date.textContent = formatDate(report.createdAt);
-
-  container.append(severity, description, date);
-  return container;
+  element.appendChild(dot);
+  return element;
 }
 
 interface ReportMarkersProps {
   map: Map | null;
   reports: FloodReport[];
+  onSelectReport: (report: FloodReport, lngLat: [number, number]) => void;
 }
 
-export default function ReportMarkers({ map, reports }: ReportMarkersProps) {
+/**
+ * Detecta la selección de un reporte y la notifica hacia arriba. No construye
+ * la presentación (popup): eso lo resuelve `MapSelectionPopup`.
+ */
+export default function ReportMarkers({
+  map,
+  reports,
+  onSelectReport,
+}: ReportMarkersProps) {
   useEffect(() => {
     if (!map) return;
 
-    const markers = reports.map((report) =>
-      new Marker({ color: SEVERITY_COLORS[report.severity] })
+    const entries = reports.map((report) => {
+      const element = createReportMarkerElement(report);
+
+      // `stopPropagation` evita que el clic llegue al mapa y seleccione una
+      // zona de riesgo situada debajo del marcador.
+      const handleClick = (event: MouseEvent) => {
+        event.stopPropagation();
+        onSelectReport(report, [report.longitude, report.latitude]);
+      };
+      element.addEventListener("click", handleClick);
+
+      const marker = new Marker({ element })
         .setLngLat([report.longitude, report.latitude])
-        .setPopup(
-          new Popup({
-            offset: 24,
-            maxWidth: "min(260px, 75vw)",
-            closeButton: true,
-            closeOnClick: true,
-          }).setDOMContent(createPopupContent(report)),
-        )
-        .addTo(map),
-    );
+        .addTo(map);
+
+      return { marker, element, handleClick };
+    });
 
     return () => {
-      markers.forEach((marker) => marker.remove());
+      entries.forEach(({ marker, element, handleClick }) => {
+        element.removeEventListener("click", handleClick);
+        marker.remove();
+      });
     };
-  }, [map, reports]);
+  }, [map, reports, onSelectReport]);
 
   return null;
 }
