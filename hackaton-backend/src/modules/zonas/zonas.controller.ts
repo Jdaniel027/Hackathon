@@ -11,7 +11,9 @@ export class ZonasController {
   @Get('mapa/:municipioSlug')
   @ApiOperation({ summary: 'Zonas y riesgos activos de un municipio' })
   @ApiParam({ name: 'municipioSlug', example: 'mazatlan' })
-  getMapa(@Param('municipioSlug') municipioSlug: string): Promise<MapaResponse> {
+  getMapa(
+    @Param('municipioSlug') municipioSlug: string,
+  ): Promise<MapaResponse> {
     return this.zonasService.getMapa(municipioSlug);
   }
 

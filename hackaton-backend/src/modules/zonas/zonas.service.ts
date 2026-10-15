@@ -4,8 +4,8 @@ import { UbicacionService } from '../ubicacion/ubicacion.service.js';
 import { APP_ERRORS } from '../../common/exception/app-exception.js';
 import { calcularEstado, umbralesPara } from './constants/umbrales.js';
 import { contiene, M_POR_GRADO } from './utils/geo.util.js';
+import type { Coordenada } from './utils/geo.util.js';
 import type {
-  Coordenada,
   MapaResponse,
   ZonaDetalle,
   ZonaMapa,
@@ -14,7 +14,7 @@ import type {
 import type { EstadoZona, FuenteClima } from '../../generated/prisma/enums.js';
 
 const LADO_DEFECTO_M = 9000;
-const LECTURAS_POR_DEFECTO = 10;
+const LECTURAS_POR_DEFECTO = 25;
 
 @Injectable()
 export class ZonasService {
@@ -24,7 +24,8 @@ export class ZonasService {
   ) {}
 
   async getMapa(municipioSlug: string): Promise<MapaResponse> {
-    const municipio = await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
+    const municipio =
+      await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
 
     const zonas = await this.prisma.zona.findMany({
       where: { municipioId: municipio.id },
@@ -133,7 +134,8 @@ export class ZonasService {
     ne: Coordenada,
     ladoM: number = LADO_DEFECTO_M,
   ): Promise<{ creadas: number }> {
-    const municipio = await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
+    const municipio =
+      await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
     const [swLat, swLng] = sw;
     const [neLat, neLng] = ne;
 

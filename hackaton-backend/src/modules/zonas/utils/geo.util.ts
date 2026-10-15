@@ -2,6 +2,7 @@
 // Fuente: docs/IDEA.md §3. Aproximación válida para áreas pequeñas (error < 1%).
 
 export const M_POR_GRADO = 111_320;
+const TOLERANCIA_GRADOS = 1e-12;
 
 export interface ZonaGeometria {
   latCentro: number;
@@ -24,11 +25,15 @@ export function mitadesEnGrados(lat: number, ladoM: number): MitadesGrados {
   };
 }
 
-export function contiene(zona: ZonaGeometria, lat: number, lng: number): boolean {
+export function contiene(
+  zona: ZonaGeometria,
+  lat: number,
+  lng: number,
+): boolean {
   const { dLat, dLng } = mitadesEnGrados(zona.latCentro, zona.ladoM);
   return (
-    Math.abs(lat - zona.latCentro) <= dLat &&
-    Math.abs(lng - zona.lngCentro) <= dLng
+    Math.abs(lat - zona.latCentro) <= dLat + TOLERANCIA_GRADOS &&
+    Math.abs(lng - zona.lngCentro) <= dLng + TOLERANCIA_GRADOS
   );
 }
 

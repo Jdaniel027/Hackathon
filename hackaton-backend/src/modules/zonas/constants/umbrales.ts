@@ -23,7 +23,7 @@ const POR_MUNICIPIO: Record<string, Partial<UmbralesLluvia>> = {
 };
 
 export function umbralesPara(municipioSlug: string): UmbralesLluvia {
-  return { ...POR_DEFECTO, ...(POR_MUNICIPIO[municipioSlug] ?? {}) };
+  return { ...POR_DEFECTO, ...POR_MUNICIPIO[municipioSlug] };
 }
 
 // Regla de estado por lluvia. TODO: histéresis (2 lecturas seguidas para bajar).

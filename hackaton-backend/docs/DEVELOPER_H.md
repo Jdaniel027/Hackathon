@@ -19,8 +19,8 @@ Eres el **primer bloque** del equipo: `DEVELOPER_V` depende de tu esquema Prisma
 
 ```
 hackaton-backend/
-├── package.json · tsconfig*.json · nest-cli.json · eslint.config.mjs · .prettierrc
-├── .env.example
+├── package.json · tsconfig*.json · nest-cli.json · .oxlintrc.json · .prettierrc
+├── prisma.config.ts · .env.example · pnpm-workspace.yaml
 ├── prisma/schema.prisma · prisma/seed.ts
 └── src/
     ├── main.ts · app.module.ts · app.controller.ts · app.service.ts
@@ -48,35 +48,35 @@ hackaton-backend/
 ## 4. Tareas
 
 ### Fase 1 — Base
-- [ ] Proyecto NestJS + pnpm + TypeScript estricto.
-- [ ] `.env.example` con las variables de `ARCHITECTURE.md` §9 (sin valores reales).
-- [ ] `env.schema.ts` con zod; no arranca sin `DATABASE_URL`, `GEMINI_API_KEY`, `ADMIN_API_KEY`.
-- [ ] `PrismaModule` global + `PrismaService`.
-- [ ] `prisma/schema.prisma` con los modelos de `IDEA.md` §2.
-- [ ] `seed.ts`: México → Sinaloa → **Mazatlán** (con `idEstadoSmn` / `idMunSmn`). *(ver §5)*
+- [x] Proyecto NestJS + pnpm + TypeScript estricto.
+- [x] `.env.example` con las variables de `ARCHITECTURE.md` §9 (sin valores reales).
+- [x] `env.schema.ts` con zod; no arranca sin `DATABASE_URL`, `GEMINI_API_KEY`, `ADMIN_API_KEY`.
+- [x] `PrismaModule` global + `PrismaService`.
+- [x] `prisma/schema.prisma` con los modelos de `IDEA.md` §2.
+- [ ] `seed.ts`: México → Sinaloa → **Mazatlán** (con `idEstadoSmn` / `idMunSmn`). *(ver §5: IDs aún provisionales)*
 
 ### Fase 2 — Cimiento común
-- [ ] `configurar-app.ts`: prefijo `/api/v1`, CORS con orígenes de env, `helmet`, pipe, filtro, Swagger en `/api/v1/docs`.
-- [ ] `AppValidationPipe` + message factory.
-- [ ] `AppGlobalExceptionFilter` (Prisma + HTTP + unknown) con envelope y `requestId`.
-- [ ] `RequestIdMiddleware`.
-- [ ] `appException()` + catálogo `APP_ERRORS` (incluye `ADMIN_KEY_INVALIDA`, `MUNICIPIO_NO_ENCONTRADO`, `ZONA_NO_ENCONTRADA`, `RATE_LIMIT_EXCEEDED`).
+- [x] `configurar-app.ts`: prefijo `/api/v1`, CORS con orígenes de env, `helmet`, pipe, filtro, Swagger en `/api/v1/docs`.
+- [x] `AppValidationPipe` + message factory.
+- [x] `AppGlobalExceptionFilter` (Prisma + HTTP + unknown) con envelope y `requestId`.
+- [x] `RequestIdMiddleware`.
+- [x] `appException()` + catálogo `APP_ERRORS` (incluye `ADMIN_KEY_INVALIDA`, `MUNICIPIO_NO_ENCONTRADO`, `ZONA_NO_ENCONTRADA`, `RATE_LIMIT_EXCEEDED`).
 
 ### Fase 3 — Seguridad y rate limiting
-- [ ] `ThrottlerModule` global desde ConfigService.
-- [ ] `@RateLimitEspecifico(limit, ttl)`.
-- [ ] Límites: global 100/min; **reportes 2/15min** (aplica V en su endpoint, tú dejas el decorator);
+- [x] `ThrottlerModule` global desde ConfigService.
+- [x] `@RateLimitEspecifico(limit, ttl)`.
+- [x] Límites: global 100/min; **reportes 2/15min** (aplica V en su endpoint, tú dejas el decorator);
       admin 40/15min (configurable por env).
-- [ ] `ApiKeyGuard` global para rutas `@Admin()`; comparación constante-tiempo; sin log de la clave.
-- [ ] `trust proxy` correcto detrás de reverse proxy.
-- [ ] `429` con `Retry-After` y `retryAfterSeg` en `details`.
+- [x] `ApiKeyGuard` global para rutas `@Admin()`; comparación constante-tiempo; sin log de la clave.
+- [x] `trust proxy` desactivado por defecto y configurable con `TRUST_PROXY_HOPS` según despliegue.
+- [x] `429` con `Retry-After` y `retryAfterSeg` en `details`.
 
 ### Fase 4 — Lectura del mapa
-- [ ] `ubicacion`: modelos País/Estado/Municipio y query por slug.
-- [ ] `zonas`: utilidades `mitadesEnGrados`, `contiene`, `limites` (`IDEA.md` §3).
-- [ ] `GET /mapa/:municipioSlug` (solo lectura de BD) → `MapaResponse`.
-- [ ] `GET /zonas/:id` con últimas lecturas.
-- [ ] `GET /health`.
+- [x] `ubicacion`: modelos País/Estado/Municipio y query por slug.
+- [x] `zonas`: utilidades `mitadesEnGrados`, `contiene`, `limites` (`IDEA.md` §3).
+- [x] `GET /mapa/:municipioSlug` (solo lectura de BD) → `MapaResponse`.
+- [x] `GET /zonas/:id` con las últimas **25** lecturas.
+- [x] `GET /health`.
 
 ### Fase 5 — Admin
 - [ ] `POST /admin/simular-lluvia`
@@ -92,6 +92,10 @@ hackaton-backend/
 - **Alcance geográfico:** la demo es **Mazatlán**. `IDEA.md` menciona Ahome/Los Mochis; el
   alcance acordado es multi-municipio. El seed usa Mazatlán.
 - **Umbrales de lluvia:** parámetro por municipio, no constante hardcodeada.
+- **IDs SMN de Mazatlán:** `idEstadoSmn=25` / `idMunSmn=12` son provisionales en el seed;
+  no ejecutarlo de nuevo sobre Supabase hasta validarlos con una respuesta real de Conagua.
+- **Historial de zona:** `GET /zonas/:id` solicita las últimas 25 lecturas, ordenadas
+  por `creadoEn` descendente. Proponer este detalle en `API_MANUAL.md` al equipo.
 - **Capa de caché:** no implementes Redis. Deja el acceso a BD detrás de un servicio
   (`ZonasService.getMapa(slug)`) para poder insertar caché-aside después sin tocar el controller.
 
