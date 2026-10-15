@@ -9,5 +9,7 @@ export function RateLimitEspecifico(
   if (limit <= 0) {
     return SkipThrottle();
   }
-  return Throttle({ default: { limit, ...(ttl !== undefined ? { ttl } : {}) } });
+  return Throttle({
+    default: { limit, ...(ttl !== undefined ? { ttl } : {}) },
+  });
 }

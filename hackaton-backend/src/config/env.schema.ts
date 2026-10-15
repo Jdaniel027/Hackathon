@@ -3,9 +3,12 @@ import { z } from 'zod';
 // Validación de variables de entorno con zod.
 // La app no arranca si falta algo obligatorio (ver ARCHITECTURE.md §9).
 export const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria.'),
 

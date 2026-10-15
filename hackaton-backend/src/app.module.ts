@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
-import { RATE_LIMITS } from './common/constants/rate-limit.constants.js';
 import { ApiKeyGuard } from './common/guards/api-key.guard.js';
 import { validateEnv } from './config/env.schema.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -22,13 +21,17 @@ import { ZonasModule } from './modules/zonas/zonas.module.js';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([
-      {
-        name: 'default',
-        ttl: RATE_LIMITS.global.ttl,
-        limit: RATE_LIMITS.global.limit,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: config.get<number>('RATE_LIMIT_GLOBAL_TTL_MS') ?? 60_000,
+          limit: config.get<number>('RATE_LIMIT_GLOBAL_LIMIT') ?? 100,
+        },
+      ],
+    }),
     PrismaModule,
     UbicacionModule,
     ZonasModule,
