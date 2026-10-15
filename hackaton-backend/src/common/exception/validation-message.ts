@@ -9,7 +9,9 @@ export function validationMessage(code: string, message: string): string {
   return JSON.stringify({ code, message } satisfies ValidationMessageParts);
 }
 
-export function parseValidationMessage(raw: unknown): ValidationMessageParts | null {
+export function parseValidationMessage(
+  raw: unknown,
+): ValidationMessageParts | null {
   if (typeof raw !== 'string') {
     return null;
   }

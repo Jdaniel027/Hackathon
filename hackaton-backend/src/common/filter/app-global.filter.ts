@@ -1,9 +1,4 @@
-import {
-  Catch,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { APP_ERRORS } from '../exception/app-exception.js';
@@ -73,7 +68,7 @@ export class AppGlobalFilter implements ExceptionFilter {
 
     if (resuelto.statusCode >= 500) {
       this.logger.error(
-        `[${resuelto.code}] ${request.method} ${request.url} → ${resuelto.statusCode}`,
+        `[${resuelto.code}] ${request.method} ${request.originalUrl} → ${resuelto.statusCode}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     }
@@ -84,7 +79,7 @@ export class AppGlobalFilter implements ExceptionFilter {
       message: resuelto.message,
       statusCode: resuelto.statusCode,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: request.originalUrl,
       details: resuelto.details,
     });
   }
@@ -169,7 +164,9 @@ export class AppGlobalFilter implements ExceptionFilter {
         ? Number(header)
         : undefined;
     const error = APP_ERRORS.RATE_LIMIT_EXCEEDED(
-      Number.isFinite(segundos) && segundos !== undefined ? segundos : undefined,
+      Number.isFinite(segundos) && segundos !== undefined
+        ? segundos
+        : undefined,
     );
     const payload = error.getResponse() as ErrorResuelto;
     return {
@@ -180,7 +177,9 @@ export class AppGlobalFilter implements ExceptionFilter {
     };
   }
 
-  private esErrorPrisma(exception: unknown): exception is PrismaLikeError & { code: string } {
+  private esErrorPrisma(
+    exception: unknown,
+  ): exception is PrismaLikeError & { code: string } {
     if (typeof exception !== 'object' || exception === null) {
       return false;
     }

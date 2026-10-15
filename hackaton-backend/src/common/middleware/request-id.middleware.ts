@@ -12,7 +12,9 @@ export function requestIdMiddleware(
 ): void {
   const entrante = req.headers[REQUEST_ID_HEADER];
   const id =
-    typeof entrante === 'string' && entrante.length > 0 ? entrante : randomUUID();
+    typeof entrante === 'string' && entrante.length > 0
+      ? entrante
+      : randomUUID();
 
   req.requestId = id;
   res.setHeader('X-Request-Id', id);

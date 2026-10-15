@@ -23,7 +23,11 @@ export const APP_ERRORS = {
     appException(403, 'ADMIN_KEY_MISSING', 'Falta el encabezado x-api-key.'),
 
   ADMIN_KEY_INVALIDA: () =>
-    appException(403, 'ADMIN_KEY_INVALIDA', 'La clave de administración no es válida.'),
+    appException(
+      403,
+      'ADMIN_KEY_INVALIDA',
+      'La clave de administración no es válida.',
+    ),
 
   MUNICIPIO_NO_ENCONTRADO: (slug?: string) =>
     appException(
@@ -90,11 +94,7 @@ export const APP_ERRORS = {
     ),
 
   CRON_DESCONOCIDO: (nombre: string) =>
-    appException(
-      400,
-      'CRON_DESCONOCIDO',
-      `El cron "${nombre}" no existe.`,
-    ),
+    appException(400, 'CRON_DESCONOCIDO', `El cron "${nombre}" no existe.`),
 
   NO_IMPLEMENTADO: (detalle: string) =>
     appException(501, 'NO_IMPLEMENTADO', detalle),
