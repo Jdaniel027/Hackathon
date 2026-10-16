@@ -9,8 +9,8 @@
 - Una sola fuente de tokens de color, tipografía, radios, sombras y espaciado, respetando la estructura CSS existente.
 
 ## Semántica visual obligatoria
-- **Zona de riesgo:** amarillo. Estado de datos: `at_risk`.
-- **Zona inundada confirmada:** rojo. Estado de datos: `flooded`.
+- **Zona de riesgo por huracán:** amarillo. Estado de datos: `at_risk` (exclusivo de huracanes; un reporte aprobado nunca genera `at_risk`).
+- **Zona inundada confirmada:** rojo. Estado de datos: `flooded` (huracán o reportes ciudadanos confirmados).
 - Cada zona tiene un único color de estado; al cambiar estado también cambia su ficha y filtro.
 - El riesgo histórico (bajo/medio/alto/desconocido) es información distinta del estado actual.
 - No mostrar reportes pendientes ni rechazados; no crear pines ni tercera capa.
@@ -19,7 +19,7 @@
 ## Tokens
 | Token | Uso | Estado |
 |---|---|---|
-| `--zone-risk` | Relleno amarillo de zona de riesgo | Semántica aprobada; HEX exacto por validar con Figma |
+| `--zone-risk` | Relleno amarillo de zona de riesgo por huracán | Semántica aprobada; HEX exacto por validar con Figma |
 | `--zone-flooded` | Relleno rojo de zona inundada | Semántica aprobada; HEX exacto por validar con Figma |
 | `--color-primary` | Acciones principales | Pendiente de extraer |
 | `--color-background` | Fondo de superficies | Pendiente de extraer |
@@ -32,7 +32,7 @@
 **No interpretar valores provisionales de mocks o ejemplos como tokens aprobados.** Revisar el CSS y Figma antes de asignar valores numéricos. No instalar Tailwind solo porque aparecía en un documento anterior.
 
 ## Patrones de interfaz aprobados
-- **Mapa:** pantalla completa; filtros independientes Riesgo/Inundadas, ubicación actual y botón de cámara para reportar.
+- **Mapa:** pantalla completa; filtros independientes Huracán/Inundadas, ubicación actual y botón de cámara para reportar.
 - **Polígonos:** GeoJSON real o mocks identificados; selección y resaltado sin ocultar su estado semántico.
 - **Bottom Sheet:** compacto, resumen y expandido; pestañas Información y Reportes; el contenido responde al estado actual de la zona.
 - **Reportes de zona:** solo confirmados asociados, fotografía ampliable; vacío específico: «No hay reportes confirmados disponibles para esta zona».

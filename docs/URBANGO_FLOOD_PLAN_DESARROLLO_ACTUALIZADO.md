@@ -10,9 +10,9 @@ UrbanGO Flood es una aplicación web **mobile-first** para visualizar áreas sus
 
 ### MVP obligatorio
 
-1. Mostrar zonas geográficas con **dos estados visuales públicos excluyentes**: **riesgo (amarillo)** e **inundada (rojo)**.
+1. Mostrar zonas geográficas con **dos estados visuales públicos excluyentes**: **riesgo por huracán (amarillo)** e **inundada (rojo)**.
 2. Cambiar el color y el contenido informativo de una zona cuando el backend confirme una transición de estado; actualizar también cuando confirme el fin de la inundación.
-3. Ofrecer dos filtros independientes: **Zonas de riesgo** y **Zonas inundadas**; cada zona aparece en **solo uno** según su estado actual.
+3. Ofrecer dos filtros independientes: **Zonas de riesgo por huracán** y **Zonas inundadas**; cada zona aparece en **solo uno** según su estado actual.
 4. Mostrar información contextual de zonas y reportes **confirmados** asociados, cuando existan, mediante un Bottom Sheet.
 5. Permitir enviar reportes anónimos con ubicación, fotografía y nivel observado obligatorios; descripción opcional.
 6. Procesar/verificar reportes desde backend con evidencia externa suficiente cuando sea posible; no exponer reportes pendientes ni rechazados en el mapa público.
@@ -40,8 +40,8 @@ UrbanGO Flood es una aplicación web **mobile-first** para visualizar áreas sus
 
 Cada zona tiene una identidad y una geometría GeoJSON. Para el MVP, el backend proporciona su **estado visual público**:
 
-- `at_risk`: **amarillo**; susceptible a inundarse, sin inundación actual confirmada.
-- `flooded`: **rojo**; inundación actual confirmada con evidencia suficiente.
+- `at_risk`: **amarillo**; zona de riesgo por **huracán** (detectado por backend/fuente meteorológica), sin inundación actual confirmada. Nunca se asigna por reportes ciudadanos.
+- `flooded`: **rojo**; inundación actual confirmada con evidencia suficiente; puede provenir de huracán o de reportes ciudadanos confirmados.
 
 **Una misma zona no se dibuja simultáneamente amarilla y roja.** Si cambia de `at_risk` a `flooded`, conserva su identidad y geometría cuando corresponda, pero cambian el color, la categoría de filtro y el contenido del Bottom Sheet. Al confirmar el fin de la inundación, puede volver a `at_risk` si sigue siendo zona de riesgo.
 
@@ -59,7 +59,7 @@ Reporte anónimo: ubicación, fotografía, nivel observado `low | medium | high`
 
 Los reportes `pending` y `rejected` **no se publican en el mapa ni en el listado público de una zona**. Los `confirmed` pueden mostrarse **dentro de la pestaña Reportes de una zona asociada**, no como marcadores independientes.
 
-Un reporte confirmado **no cambia por sí solo** una zona a `flooded`: el backend debe confirmar también la inundación actual y el alcance geográfico. Si una API carece de cobertura, está desactualizada o indica valores normales, **no rechazar automáticamente** un reporte: conservar `pending` mientras no exista evidencia concluyente.
+Un reporte confirmado **no cambia por sí solo** una zona a `flooded`: el backend debe confirmar también la inundación actual y el alcance geográfico. Si una API carece de cobertura, está desactualizada o indica valores normales, **no rechazar automáticamente** un reporte: conservar `pending` mientras no exista evidencia concluyente. La aprobación de un reporte solo puede resultar en `flooded`; nunca en `at_risk`, reservado a huracanes.
 
 Al enviar un reporte, mostrar **confirmación privada de recepción solo después de respuesta exitosa**; explicar que está sujeto a verificación. No prometer que será publicado ni que cambiará el mapa inmediatamente.
 
@@ -74,7 +74,7 @@ Mostrar fecha de actualización, fuente, elevación (m) y superficie (km²) **so
 ### 4.1 Mapa
 
 - Mapa a pantalla completa en móvil; menú y botón de ubicación actual; botón flotante de cámara para reportar.
-- Dos filtros independientes: **Riesgo (amarillo)** e **Inundadas (rojo)**. Una zona que cambia de estado debe salir del filtro anterior y aparecer en el nuevo.
+- Dos filtros independientes: **Huracán (amarillo)** e **Inundadas (rojo)**. Una zona que cambia de estado debe salir del filtro anterior y aparecer en el nuevo.
 - Seleccionar un polígono visible abre el Bottom Sheet con la información de esa zona.
 - Resaltar zona seleccionada; al ocultar su filtro, limpiar selección o cerrar su detalle de forma coherente.
 - No renderizar marcadores ni filtros de reportes públicos.
@@ -360,7 +360,7 @@ No crear un segundo mapa, no duplicar contratos, no modificar archivos ajenos si
 
 ## 11. Checklist de aceptación del MVP
 
-- [ ] Una zona tiene un solo estado visual público: amarillo (riesgo) o rojo (inundada).
+- [ ] Una zona tiene un solo estado visual público: amarillo (riesgo por huracán) o rojo (inundada).
 - [ ] La transición confirmada actualiza color, filtro y contenido del Bottom Sheet.
 - [ ] El rojo solo cubre geometría confirmada; no se extiende a un área por un punto aislado.
 - [ ] Dos filtros independientes, sin capa de reportes.

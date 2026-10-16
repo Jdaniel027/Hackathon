@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/*
+ * El diseño no usa los controles nativos de MapLibre (zoom/brújula): el mapa se
+ * controla con gestos y con botones propios (menú ☰ a la izquierda y botón de
+ * ubicación a la derecha). Se ocultan los contenedores de control de la parte
+ * superior para que ningún control nativo aparezca tras el botón de ubicación.
+ */
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-top-right {
+  display: none;
+}
+

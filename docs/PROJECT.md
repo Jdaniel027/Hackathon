@@ -10,7 +10,7 @@ Personas que consultan el mapa desde su teléfono y ciudadanos que aportan repor
 Mapa mobile-first con información de riesgo e inundación corroborada y un canal de reportes ciudadanos sujeto a verificación.
 
 ## Flujo demostrable
-1. Abrir mapa y filtrar zonas amarillas (riesgo) y rojas (inundadas).
+1. Abrir mapa y filtrar zonas amarillas (riesgo por huracán) y rojas (inundadas).
 2. Tocar una zona y consultar su información y reportes confirmados asociados.
 3. Abrir formulario, seleccionar ubicación, adjuntar fotografía, indicar nivel y enviar; recibir acuse privado.
 4. Cuando backend confirme un cambio de estado, actualizar color, filtro y detalle de la zona.
@@ -20,7 +20,7 @@ Mapa mobile-first con información de riesgo e inundación corroborada y un cana
 - [ ] Dos filtros independientes, geolocalización y selección de zona.
 - [ ] Bottom Sheet compacto/resumen/expandido y reportes confirmados asociados.
 - [ ] Formulario anónimo con ubicación, fotografía y nivel observado; descripción opcional.
-- [ ] Verificación desde backend cuando haya evidencia suficiente; pendientes no públicos.
+- [ ] Verificación desde backend cuando haya evidencia suficiente; pendientes no públicos; un reporte aprobado solo genera zona inundada, nunca de riesgo por huracán.
 - [ ] Integración con backend y manejo de errores, datos faltantes y carga.
 
 ## Fuera de alcance
@@ -31,5 +31,8 @@ Demostración móvil end-to-end sin datos ficticios presentados como reales; cam
 
 ## Concurso
 Reglas sobre código previo, IA, despliegue y servicios externos: **pendientes de verificar**. No inventar restricciones.
+
+## Definiciones pendientes de aprobación
+- Persistencia de reportes e imágenes: almacenamiento local en el navegador con límite de 24 h. Ver `DECISIONS.md` D-005 (estado: PROPUESTO).
 
 Fuente de detalle: `URBANGO_FLOOD_PLAN_DESARROLLO_ACTUALIZADO.md`.
