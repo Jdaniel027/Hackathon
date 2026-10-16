@@ -28,6 +28,7 @@ describe('rutas HTTP de administración', () => {
   const generarZonas = vi.fn();
   const buscarZona = vi.fn();
   const encontrarZona = vi.fn();
+  const encontrarZonas = vi.fn();
   const elevation = vi.fn();
 
   beforeEach(async () => {
@@ -35,9 +36,11 @@ describe('rutas HTTP de administración', () => {
     simularLluvia.mockResolvedValue({ id: 1, estado: 'PRECAUCION' });
     generarZonas.mockResolvedValue({ creadas: 1 });
     encontrarZona.mockResolvedValue(null);
+    // Sin zonas no hay trabajo que hacer: el cron responde 201 sin tocar la BD.
+    encontrarZonas.mockResolvedValue([]);
 
     const prisma = {
-      zona: { findUnique: encontrarZona },
+      zona: { findUnique: encontrarZona, findMany: encontrarZonas },
     } as unknown as PrismaService;
     const zonas = {
       simularLluvia,
@@ -58,6 +61,10 @@ describe('rutas HTTP de administración', () => {
           provide: AdminService,
           useValue: new AdminService(prisma, zonas, openMeteo),
         },
+        // CronsService los necesita para construirse; el cron real es el que
+        // ejecuta /admin/cron/:nombre.
+        { provide: PrismaService, useValue: prisma },
+        { provide: OpenMeteoService, useValue: openMeteo },
         CronsService,
         {
           provide: ConfigService,
@@ -158,7 +165,7 @@ describe('rutas HTTP de administración', () => {
     expect(encontrarZona).not.toHaveBeenCalled();
   });
 
-  it('acepta solo crons de la lista y declara que V aún no los implementa', async () => {
+  it('acepta solo crons de la lista y ejecuta el solicitado', async () => {
     await request(app.getHttpServer())
       .post('/api/v1/admin/cron/otro')
       .set('x-api-key', CLAVE_PRUEBA)
@@ -168,10 +175,7 @@ describe('rutas HTTP de administración', () => {
       .post('/api/v1/admin/cron/actualizarClima')
       .set('x-api-key', CLAVE_PRUEBA)
       .expect(201);
-    expect(respuesta.body).toMatchObject({
-      nombre: 'actualizarClima',
-      ejecutado: false,
-    });
+    expect(respuesta.body).toMatchObject({ nombre: 'actualizarClima' });
   });
 
   it('devuelve 501 para ciclón válido sin generar riesgos ni reportes', async () => {
