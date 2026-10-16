@@ -33,7 +33,7 @@ export interface MapaResponse {
 export interface LecturaClimaApi {
   id: number;
   mm1h: number;
-  mm24h: number;
+  mm24h: number | null;
   fuente: FuenteClimaApi;
   creadoEn: string;
 }

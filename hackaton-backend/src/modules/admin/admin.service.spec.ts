@@ -12,11 +12,21 @@ describe('AdminService', () => {
   const getElevaciones = vi.fn();
   const simularLluvia = vi.fn();
   const generarZonas = vi.fn();
+  const buscarZonaPorPunto = vi.fn();
+  const riesgoCreate = vi.fn();
+  const reporteCreate = vi.fn();
+  const transaction = vi.fn();
   const prisma = {
     zona: { findUnique },
-    zonaRiesgo: { findMany, createMany },
+    zonaRiesgo: { findMany, createMany, create: riesgoCreate },
+    reporte: { create: reporteCreate },
+    $transaction: transaction,
   } as unknown as PrismaService;
-  const zonas = { simularLluvia, generarZonas } as unknown as ZonasService;
+  const zonas = {
+    simularLluvia,
+    generarZonas,
+    buscarZonaPorPunto,
+  } as unknown as ZonasService;
   const openMeteo = { getElevaciones } as unknown as OpenMeteoService;
   const servicio = new AdminService(prisma, zonas, openMeteo);
 
@@ -31,6 +41,10 @@ describe('AdminService', () => {
     });
     findMany.mockResolvedValue([]);
     createMany.mockResolvedValue({ count: 1 });
+    buscarZonaPorPunto.mockResolvedValue({ id: 1, municipioId: 4 });
+    riesgoCreate.mockResolvedValue({});
+    reporteCreate.mockResolvedValue({});
+    transaction.mockResolvedValue([{}, {}]);
   });
 
   it('delega la simulación y la generación a ZonasService', async () => {
@@ -128,20 +142,37 @@ describe('AdminService', () => {
     expect(createMany).toHaveBeenCalledTimes(1);
   });
 
-  it('no escribe ciclones mientras V no complete su integración', async () => {
+  it('registra riesgo y reporte manual de ciclón en una transacción', async () => {
+    const resultado = await servicio.registrarCiclon({
+      lat: 23.2,
+      lng: -106.4,
+      categoria: '1',
+      vientoKmh: 130,
+    });
+    expect(resultado).toMatchObject({ ok: true, zonaId: 1 });
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(riesgoCreate.mock.calls[0][0].data).toMatchObject({
+      motivo: 'INUNDACION',
+      origen: 'CICLON',
+      municipioId: 4,
+      radioM: 500,
+    });
+    expect(reporteCreate.mock.calls[0][0].data).toMatchObject({
+      fuente: 'CICLON',
+      zonaId: 1,
+    });
+  });
+
+  it('rechaza ciclón sin zona sin persistir', async () => {
+    buscarZonaPorPunto.mockResolvedValue(null);
     await expect(
       servicio.registrarCiclon({
-        lat: 23.2,
-        lng: -106.4,
+        lat: 0,
+        lng: 0,
         categoria: '1',
         vientoKmh: 130,
       }),
-    ).rejects.toMatchObject({
-      response: { code: 'NO_IMPLEMENTADO' },
-      status: 501,
-    });
-    expect(findUnique).not.toHaveBeenCalled();
-    expect(findMany).not.toHaveBeenCalled();
-    expect(createMany).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({ response: { code: 'REPORT_FUERA_DE_ZONA' } });
+    expect(transaction).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,9 @@
 # Propuesta — unificar clasificación de foto con `EstadoZona`
 
-> Autor: DEVELOPER_V · Estado: **PENDIENTE DE APROBACIÓN / APLICACIÓN por DEVELOPER_H**.
+> Autor: DEVELOPER_V · Estado: **NO APROBADA**. El responsable decidió conservar
+> `INUNDADO` / `PARCIAL` / `NO_INUNDADO` en API y Prisma el 2026-10-16.
+> Se conserva este archivo como historial de la propuesta; el adaptador temporal
+> mencionado abajo fue eliminado.
 > No modifica contrato ni esquema por sí sola: es una solicitud de cambio.
 
 ## 1. Motivo

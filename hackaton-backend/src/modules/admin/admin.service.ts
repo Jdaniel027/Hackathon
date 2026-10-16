@@ -133,11 +133,34 @@ export class AdminService {
   }
 
   async registrarCiclon(
-    _dto: RegistrarCiclonDto,
+    dto: RegistrarCiclonDto,
   ): Promise<RegistrarCiclonResultado> {
-    throw APP_ERRORS.NO_IMPLEMENTADO(
-      'El registro de ciclones está pendiente de integración.',
-    );
+    const zona = await this.zonas.buscarZonaPorPunto(dto.lat, dto.lng);
+    if (!zona) throw APP_ERRORS.REPORT_FUERA_DE_ZONA();
+    const venceEn = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    await this.prisma.$transaction([
+      this.prisma.zonaRiesgo.create({
+        data: {
+          municipioId: zona.municipioId,
+          lat: dto.lat,
+          lng: dto.lng,
+          radioM: 500,
+          motivo: 'INUNDACION',
+          origen: 'CICLON',
+          venceEn,
+        },
+      }),
+      this.prisma.reporte.create({
+        data: {
+          zonaId: zona.id,
+          fuente: 'CICLON',
+          tipo: 'CORROBORADO',
+          userLat: dto.lat,
+          userLng: dto.lng,
+        },
+      }),
+    ]);
+    return { ok: true, zonaId: zona.id, venceEn: venceEn.toISOString() };
   }
 
   private mallaPuntos(

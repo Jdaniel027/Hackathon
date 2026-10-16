@@ -14,7 +14,11 @@ import { RateLimitEspecifico } from '../../common/decorators/rate-limit.decorato
 import { CrearReporteDto } from './dto/crear-reporte.dto.js';
 import { ListarReportesQueryDto } from './dto/listar-reportes-query.dto.js';
 import { ReportesService } from './reportes.service.js';
-import type { ListarReportesResponse, ReporteCreadoResponse } from './reportes.types.js';
+import { MAX_FOTO_BYTES } from './utils/validar-foto.util.js';
+import type {
+  ListarReportesResponse,
+  ReporteCreadoResponse,
+} from './reportes.types.js';
 
 @ApiTags('reportes')
 @Controller('reportes')
@@ -23,9 +27,13 @@ export class ReportesController {
 
   @Post()
   @RateLimitEspecifico(RATE_LIMITS.reportes.limit, RATE_LIMITS.reportes.ttl)
-  @UseInterceptors(FileInterceptor('foto'))
+  @UseInterceptors(
+    FileInterceptor('foto', { limits: { fileSize: MAX_FOTO_BYTES } }),
+  )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Crea un reporte ciudadano con foto (2 cada 15 min por IP)' })
+  @ApiOperation({
+    summary: 'Crea un reporte ciudadano con foto (2 cada 15 min por IP)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -46,7 +54,9 @@ export class ReportesController {
 
   @Get()
   @ApiOperation({ summary: 'Lista los reportes más recientes' })
-  listar(@Query() query: ListarReportesQueryDto): Promise<ListarReportesResponse> {
+  listar(
+    @Query() query: ListarReportesQueryDto,
+  ): Promise<ListarReportesResponse> {
     return this.reportesService.listar(query);
   }
 }

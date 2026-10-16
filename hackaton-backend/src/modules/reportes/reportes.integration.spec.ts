@@ -4,7 +4,15 @@ import type { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { configurarApp } from '../../bootstrap/configurar-app.js';
 import { PrismaModule } from '../../prisma/prisma.module.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -60,7 +68,9 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
 
     prisma = app.get(PrismaService);
 
-    const pais = await prisma.pais.create({ data: { nombre: `IT País ${sufijo}` } });
+    const pais = await prisma.pais.create({
+      data: { nombre: `IT País ${sufijo}` },
+    });
     paisId = pais.id;
     const estado = await prisma.estado.create({
       data: { nombre: `IT Estado ${sufijo}`, paisId },
@@ -76,7 +86,11 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
     municipioId = municipio.id;
     const zona = await prisma.zona.upsert({
       where: {
-        latCentro_lngCentro_modelo: { latCentro: LAT, lngCentro: LNG, modelo: MODELO },
+        latCentro_lngCentro_modelo: {
+          latCentro: LAT,
+          lngCentro: LNG,
+          modelo: MODELO,
+        },
       },
       update: { municipioId },
       create: { municipioId, latCentro: LAT, lngCentro: LNG, ladoM: 9000 },
@@ -103,7 +117,8 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
           await prisma.zonaRiesgo.deleteMany({ where: { municipioId } });
           await prisma.municipio.deleteMany({ where: { id: municipioId } });
         }
-        if (estadoId) await prisma.estado.deleteMany({ where: { id: estadoId } });
+        if (estadoId)
+          await prisma.estado.deleteMany({ where: { id: estadoId } });
         if (paisId) await prisma.pais.deleteMany({ where: { id: paisId } });
       }
     } finally {
@@ -119,7 +134,7 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
         .post(base)
         .field('lat', String(LAT))
         .field('lng', String(LNG))
-        .attach('foto', Buffer.from('jpeg-simulado'), {
+        .attach('foto', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
           filename: 'evidencia.jpg',
           contentType: 'image/jpeg',
         })
@@ -145,20 +160,20 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
       expect(fila.userLng).toBeCloseTo(LNG, 6);
     });
 
-    it('traduce PRECAUCION a PARCIAL en la BD y de vuelta a PRECAUCION en la API', async () => {
-      clasificarFoto.mockResolvedValueOnce('PRECAUCION');
+    it('mantiene PARCIAL en la BD y en la API', async () => {
+      clasificarFoto.mockResolvedValueOnce('PARCIAL');
 
       const respuesta = await request(app.getHttpServer())
         .post(base)
         .field('lat', String(LAT))
         .field('lng', String(LNG))
-        .attach('foto', Buffer.from('jpeg-simulado'), {
+        .attach('foto', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
           filename: 'evidencia.jpg',
           contentType: 'image/jpeg',
         })
         .expect(201);
 
-      expect(respuesta.body.clasificacion).toBe('PRECAUCION');
+      expect(respuesta.body.clasificacion).toBe('PARCIAL');
       const fila = await prisma.reporte.findUniqueOrThrow({
         where: { id: respuesta.body.id },
       });
@@ -202,7 +217,7 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
         .post(base)
         .field('lat', '0')
         .field('lng', '0')
-        .attach('foto', Buffer.from('jpeg-simulado'), {
+        .attach('foto', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
           filename: 'evidencia.jpg',
           contentType: 'image/jpeg',
         })
@@ -217,7 +232,7 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
         .post(base)
         .field('lat', '200')
         .field('lng', String(LNG))
-        .attach('foto', Buffer.from('jpeg-simulado'), {
+        .attach('foto', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
           filename: 'evidencia.jpg',
           contentType: 'image/jpeg',
         })
@@ -235,7 +250,7 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
         .post(base)
         .field('lat', String(LAT))
         .field('lng', String(LNG))
-        .attach('foto', Buffer.from('jpeg-simulado'), {
+        .attach('foto', Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
           filename: 'evidencia.jpg',
           contentType: 'image/jpeg',
         })
@@ -246,9 +261,9 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
         .query({ zonaId })
         .expect(200);
 
-      expect(respuesta.body.reportes.map((r: { id: number }) => r.id)).toContain(
-        creado.body.id,
-      );
+      expect(
+        respuesta.body.reportes.map((r: { id: number }) => r.id),
+      ).toContain(creado.body.id);
       const listado = respuesta.body.reportes.find(
         (r: { id: number }) => r.id === creado.body.id,
       );
@@ -264,7 +279,10 @@ describe.skipIf(!HAY_BD)('API de reportes contra PostgreSQL real', () => {
     it('filtra por "desde": un futuro lejano no devuelve la zona', async () => {
       const respuesta = await request(app.getHttpServer())
         .get(base)
-        .query({ zonaId, desde: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
+        .query({
+          zonaId,
+          desde: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        })
         .expect(200);
 
       expect(respuesta.body.reportes).toEqual([]);

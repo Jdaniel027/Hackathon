@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configurarApp } from '../../bootstrap/configurar-app.js';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard.js';
 import { CronsService } from '../crons/crons.service.js';
+import { ConaguaService } from '../conagua/conagua.service.js';
 import { OpenMeteoService } from '../open-meteo/open-meteo.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { ZonasService } from '../zonas/zonas.service.js';
@@ -65,6 +66,10 @@ describe('rutas HTTP de administración', () => {
         // ejecuta /admin/cron/:nombre.
         { provide: PrismaService, useValue: prisma },
         { provide: OpenMeteoService, useValue: openMeteo },
+        {
+          provide: ConaguaService,
+          useValue: { getPronosticosPorHora: vi.fn() },
+        },
         CronsService,
         {
           provide: ConfigService,
@@ -178,15 +183,15 @@ describe('rutas HTTP de administración', () => {
     expect(respuesta.body).toMatchObject({ nombre: 'actualizarClima' });
   });
 
-  it('devuelve 501 para ciclón válido sin generar riesgos ni reportes', async () => {
+  it('rechaza ciclones fuera de zona y valida el DTO', async () => {
     const respuesta = await request(app.getHttpServer())
       .post('/api/v1/admin/ciclon')
       .set('x-api-key', CLAVE_PRUEBA)
       .send({ lat: 23.2, lng: -106.4, categoria: '1', vientoKmh: 130 })
-      .expect(501);
-    expect(respuesta.body.code).toBe('NO_IMPLEMENTADO');
+      .expect(400);
+    expect(respuesta.body.code).toBe('REPORT_FUERA_DE_ZONA');
     expect(encontrarZona).not.toHaveBeenCalled();
-    expect(buscarZona).not.toHaveBeenCalled();
+    expect(buscarZona).toHaveBeenCalledOnce();
     expect(elevation).not.toHaveBeenCalled();
 
     await request(app.getHttpServer())

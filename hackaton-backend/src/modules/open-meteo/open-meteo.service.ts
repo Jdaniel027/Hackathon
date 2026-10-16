@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { appException, APP_ERRORS } from '../../common/exception/app-exception.js';
+import {
+  appException,
+  APP_ERRORS,
+} from '../../common/exception/app-exception.js';
 
 export interface PuntoZona {
   latCentro: number;
@@ -54,16 +57,28 @@ export class OpenMeteoService {
     url.searchParams.set('timezone', this.timezone);
 
     const crudo = await this.pedir(url, 'forecast');
-    const items = Array.isArray(crudo) ? crudo : [crudo];
+    const items: unknown[] = Array.isArray(crudo) ? crudo : [crudo];
+    if (items.length !== zonas.length)
+      throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
 
     return zonas.map((zona, indice) => {
       const item = items[indice] as OpenMeteoForecastItem | undefined;
-      const precipitacion = item?.hourly?.precipitation ?? [];
+      const precipitacion = item?.hourly?.precipitation;
+      if (
+        !Array.isArray(precipitacion) ||
+        precipitacion.length === 0 ||
+        !precipitacion.every(
+          (mm) => typeof mm === 'number' && Number.isFinite(mm) && mm >= 0,
+        )
+      )
+        throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
       return {
         latCentro: zona.latCentro,
         lngCentro: zona.lngCentro,
-        mm1h: precipitacion.length > 0 ? (precipitacion.at(-1) ?? 0) : 0,
-        mm24h: precipitacion.reduce<number>((acc, valor) => acc + (valor ?? 0), 0),
+        mm1h: precipitacion.at(-1)!,
+        mm24h: precipitacion
+          .slice(-24)
+          .reduce<number>((acc, valor) => acc + valor!, 0),
         latModelo: item?.latitude ?? null,
         lngModelo: item?.longitude ?? null,
       };
@@ -86,31 +101,43 @@ export class OpenMeteoService {
     url.searchParams.set('latitude', puntos.map((p) => p.latCentro).join(','));
     url.searchParams.set('longitude', puntos.map((p) => p.lngCentro).join(','));
 
-    const crudo = (await this.pedir(url, 'elevation')) as OpenMeteoElevationResponse;
-    return (crudo.elevation ?? []).map((valor) => valor ?? 0);
+    const crudo = (await this.pedir(
+      url,
+      'elevation',
+    )) as OpenMeteoElevationResponse;
+    if (
+      !Array.isArray(crudo?.elevation) ||
+      crudo.elevation.length !== puntos.length ||
+      !crudo.elevation.every(
+        (valor) => typeof valor === 'number' && Number.isFinite(valor),
+      )
+    )
+      throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
+    return crudo.elevation as number[];
   }
 
   private async pedir(url: URL, contexto: string): Promise<unknown> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const respuesta = await fetch(url, {
-        signal: controller.signal,
-        headers: { accept: 'application/json' },
-      });
-      if (!respuesta.ok) {
-        this.logger.error(`Open-Meteo ${contexto} respondió ${respuesta.status}`);
+    for (let intento = 0; intento < 2; intento += 1) {
+      try {
+        const respuesta = await fetch(url, {
+          signal: AbortSignal.timeout(this.timeoutMs),
+          headers: { accept: 'application/json' },
+        });
+        if (!respuesta.ok) {
+          if (intento === 0 && respuesta.status >= 500) continue;
+          this.logger.error(
+            `Open-Meteo ${contexto} respondió ${respuesta.status}`,
+          );
+          throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
+        }
+        return (await respuesta.json()) as unknown;
+      } catch (error) {
+        if (intento === 0 && !(error instanceof Error && 'getStatus' in error))
+          continue;
+        this.logger.error(`Open-Meteo ${contexto} no disponible.`, error);
         throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
       }
-      return (await respuesta.json()) as unknown;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        this.logger.error(`Open-Meteo ${contexto} agotó el tiempo de espera.`);
-        throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timer);
     }
+    throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
   }
 }

@@ -118,7 +118,7 @@ model LecturaClima {
   zonaId   Int
   zona     Zona        @relation(fields: [zonaId], references: [id])
   mm1h     Float
-  mm24h    Float
+  mm24h    Float?
   fuente   FuenteClima
   creadoEn DateTime    @default(now())
 
