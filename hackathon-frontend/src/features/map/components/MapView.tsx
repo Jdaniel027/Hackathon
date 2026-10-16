@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   GeolocateControl,
   Map,
@@ -10,17 +10,17 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { MAP_CONFIG } from "../config/map.config";
-import { MOCK_FLOOD_REPORTS } from "../data/mockReports";
 import { MOCK_RISK_ZONES } from "../../risk-zones/data/mockRiskZones";
-import ReportMarkers from "./ReportMarkers";
-import ReportFiltersPanel from "./ReportFiltersPanel";
 import MapSelectionPopup from "./MapSelectionPopup";
 import RiskZonesLayer from "../../risk-zones/components/RiskZonesLayer";
-import { EMPTY_REPORT_FILTERS, filterReports } from "../lib/filterReports";
-import type { ReportFilters } from "../lib/filterReports";
+import StatusTransitionDemo from "../../risk-zones/components/StatusTransitionDemo";
+import { applyZoneStatus } from "../../risk-zones/lib/zoneTransitions";
 import type { MapSelection } from "../types/selection";
-import type { FloodReport } from "../types/report";
-import type { RiskZoneProperties } from "../../risk-zones/types/riskZone";
+import type {
+  RiskZoneCollection,
+  RiskZoneProperties,
+  ZoneStatus,
+} from "../../risk-zones/types/riskZone";
 
 // Configurar el Worker antes de crear el mapa
 setWorkerUrl(workerUrl);
@@ -35,13 +35,10 @@ export default function MapView() {
   // Única fuente de verdad de la selección activa del mapa.
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [zonesVisible, setZonesVisible] = useState(true);
-  const [filters, setFilters] = useState<ReportFilters>(EMPTY_REPORT_FILTERS);
 
-  // Datos originales separados de los filtrados (sin mutar los mocks).
-  const filteredReports = useMemo(
-    () => filterReports(MOCK_FLOOD_REPORTS, filters),
-    [filters],
-  );
+  // Zonas en estado local para poder aplicar transiciones mock (F1-04) sin
+  // recrear el mapa: el cambio de `data` se refleja vía `source.setData`.
+  const [zones, setZones] = useState<RiskZoneCollection>(MOCK_RISK_ZONES);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -91,7 +88,6 @@ export default function MapView() {
 
     map.on("load", () => {
       setMapReady(true);
-      console.log("✅ Mapa cargado correctamente");
     });
 
     map.on("error", (event) => {
@@ -111,13 +107,6 @@ export default function MapView() {
     };
   }, []);
 
-  const handleSelectReport = useCallback(
-    (report: FloodReport, lngLat: [number, number]) => {
-      setSelection({ kind: "report", lngLat, report });
-    },
-    [],
-  );
-
   const handleSelectZone = useCallback(
     (zone: RiskZoneProperties, lngLat: [number, number]) => {
       setSelection({ kind: "risk-zone", lngLat, zone });
@@ -129,16 +118,34 @@ export default function MapView() {
     setSelection(null);
   }, []);
 
-  // Al ocultar las zonas, limpiar la selección de zona (su popup dejaría de tener sentido).
+  // Al ocultar las zonas, limpiar la selección (su popup dejaría de tener sentido).
   const handleToggleZones = useCallback(() => {
     const next = !zonesVisible;
     setZonesVisible(next);
-    if (!next) {
-      setSelection((current) =>
-        current?.kind === "risk-zone" ? null : current,
-      );
-    }
+    if (!next) setSelection(null);
   }, [zonesVisible]);
+
+  // Transición mock (F1-04): alterna el estado de la primera zona para
+  // comprobar que color y categoría se actualizan sin recrear el mapa.
+  // No es flujo público; se retirará cuando el backend confirme los estados.
+  const handleCycleFirstZone = useCallback(() => {
+    const zone = zones.features[0];
+    if (!zone) return;
+
+    const nextStatus: ZoneStatus =
+      zone.properties.status === "at_risk" ? "flooded" : "at_risk";
+    const updated = applyZoneStatus(zones, zone.properties.id, nextStatus);
+    setZones(updated);
+
+    // Mantener coherente el popup si la zona transicionada estaba seleccionada.
+    setSelection((current) => {
+      if (!current || current.zone.id !== zone.properties.id) return current;
+      const nextZone = updated.features.find(
+        (feature) => feature.properties.id === current.zone.id,
+      );
+      return nextZone ? { ...current, zone: nextZone.properties } : current;
+    });
+  }, [zones]);
 
   return (
     <div className="relative h-full w-full">
@@ -161,30 +168,25 @@ export default function MapView() {
       )}
 
       {/* Fuente de datos separada de la representación: los mocks se reemplazarán por el backend. */}
-      <ReportMarkers
-        map={mapInstance}
-        reports={filteredReports}
-        onSelectReport={handleSelectReport}
-      />
-
       <RiskZonesLayer
         map={mapInstance}
-        data={MOCK_RISK_ZONES}
+        data={zones}
         visible={zonesVisible}
         onToggleVisibility={handleToggleZones}
         onSelectZone={handleSelectZone}
       />
 
+      {zonesVisible && (
+        <StatusTransitionDemo
+          zones={zones}
+          onCycleFirstZone={handleCycleFirstZone}
+        />
+      )}
+
       <MapSelectionPopup
         map={mapInstance}
         selection={selection}
         onClose={handleCloseSelection}
-      />
-
-      <ReportFiltersPanel
-        filters={filters}
-        onChange={setFilters}
-        resultCount={filteredReports.length}
       />
     </div>
   );

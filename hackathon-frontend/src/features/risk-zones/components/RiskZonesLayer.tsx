@@ -3,10 +3,10 @@ import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
 
 import type { RiskZoneCollection, RiskZoneProperties } from "../types/riskZone";
 import {
-  RISK_BORDER_COLORS,
-  RISK_FILL_COLORS,
-  RISK_LABELS,
-  RISK_LEVELS,
+  STATUS_BORDER_COLORS,
+  STATUS_FILL_COLORS,
+  STATUS_LABELS,
+  ZONE_STATUSES,
 } from "../lib/riskZoneStyles";
 
 const SOURCE_ID = "risk-zones";
@@ -80,16 +80,14 @@ export default function RiskZonesLayer({
           source: SOURCE_ID,
           layout: { visibility },
           paint: {
+            // El color depende del estado visual público. Fallback a `at_risk`
+            // (amarillo) para no pintar de rojo sin confirmación del backend.
             "fill-color": [
               "match",
-              ["get", "riskLevel"],
-              "high",
-              RISK_FILL_COLORS.high,
-              "medium",
-              RISK_FILL_COLORS.medium,
-              "low",
-              RISK_FILL_COLORS.low,
-              RISK_FILL_COLORS.low,
+              ["get", "status"],
+              "flooded",
+              STATUS_FILL_COLORS.flooded,
+              STATUS_FILL_COLORS.at_risk,
             ],
             "fill-opacity": 0.35,
           },
@@ -105,14 +103,10 @@ export default function RiskZonesLayer({
           paint: {
             "line-color": [
               "match",
-              ["get", "riskLevel"],
-              "high",
-              RISK_BORDER_COLORS.high,
-              "medium",
-              RISK_BORDER_COLORS.medium,
-              "low",
-              RISK_BORDER_COLORS.low,
-              RISK_BORDER_COLORS.low,
+              ["get", "status"],
+              "flooded",
+              STATUS_BORDER_COLORS.flooded,
+              STATUS_BORDER_COLORS.at_risk,
             ],
             "line-width": 1.5,
             "line-opacity": 0.9,
@@ -210,18 +204,18 @@ export default function RiskZonesLayer({
       {hasValidData && !isEmpty && visible && (
         <div className="pointer-events-auto rounded-md bg-white/95 p-2 shadow ring-1 ring-slate-200">
           <ul className="space-y-1 text-[11px] text-slate-600">
-            {RISK_LEVELS.map((level) => (
-              <li key={level} className="flex items-center gap-2">
+            {ZONE_STATUSES.map((status) => (
+              <li key={status} className="flex items-center gap-2">
                 <span
                   className="h-2.5 w-2.5 rounded-sm"
-                  style={{ backgroundColor: RISK_FILL_COLORS[level] }}
+                  style={{ backgroundColor: STATUS_FILL_COLORS[status] }}
                 />
-                {`Riesgo ${RISK_LABELS[level].toLowerCase()}`}
+                {STATUS_LABELS[status]}
               </li>
             ))}
           </ul>
           <p className="mt-1 max-w-36 text-[10px] leading-tight text-slate-400">
-            Zonas de demostración — no representan riesgos verificados
+            Zonas de demostración — no representan estados verificados
           </p>
         </div>
       )}

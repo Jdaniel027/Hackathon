@@ -4,7 +4,10 @@ import type { RiskZoneCollection } from "../types/riskZone";
  * ⚠️ ZONAS FICTICIAS SOLO PARA DESARROLLO.
  * No representan zonas reales de inundación ni información oficial, validada
  * o calculada. Sirven únicamente para comprobar la visualización de polígonos.
- * Deben sustituirse por la respuesta GeoJSON del backend antes de cualquier demo.
+ * `status` simula el estado visual público que confirmará el backend:
+ * `at_risk` (amarillo) es exclusivo de riesgo por huracán; `flooded` (rojo)
+ * cubre inundación confirmada por huracán o por reportes ciudadanos. Deben
+ * sustituirse por la respuesta GeoJSON del backend antes de cualquier demo.
  *
  * Orden de coordenadas GeoJSON: [longitud, latitud].
  */
@@ -16,9 +19,10 @@ export const MOCK_RISK_ZONES: RiskZoneCollection = {
       properties: {
         id: "rz-001",
         name: "Centro histórico",
+        status: "at_risk",
         riskLevel: "high",
         description:
-          "Sector con drenaje insuficiente (zona de demostración).",
+          "Riesgo de inundación por huracán (zona de demostración).",
       },
       geometry: {
         type: "Polygon",
@@ -37,54 +41,11 @@ export const MOCK_RISK_ZONES: RiskZoneCollection = {
       type: "Feature",
       properties: {
         id: "rz-002",
-        name: "Colonia del Norte",
-        riskLevel: "medium",
-        description:
-          "Escurrimientos hacia calles principales (zona de demostración).",
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [-108.472, 25.5855],
-            [-108.464, 25.5855],
-            [-108.464, 25.5805],
-            [-108.472, 25.5805],
-            [-108.472, 25.5855],
-          ],
-        ],
-      },
-    },
-    {
-      type: "Feature",
-      properties: {
-        id: "rz-003",
-        name: "Sector Sur",
-        riskLevel: "low",
-        description:
-          "Encharcamientos menores y temporales (zona de demostración).",
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [-108.47, 25.562],
-            [-108.462, 25.562],
-            [-108.462, 25.5575],
-            [-108.47, 25.5575],
-            [-108.47, 25.562],
-          ],
-        ],
-      },
-    },
-    {
-      type: "Feature",
-      properties: {
-        id: "rz-004",
         name: "Zona Poniente",
+        status: "flooded",
         riskLevel: "high",
         description:
-          "Cercana a canales; riesgo elevado en lluvias (zona de demostración).",
+          "Inundación confirmada cerca del canal (zona de demostración).",
       },
       geometry: {
         type: "Polygon",

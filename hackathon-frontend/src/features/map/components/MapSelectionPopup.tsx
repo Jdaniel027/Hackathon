@@ -3,7 +3,6 @@ import { Popup } from "maplibre-gl";
 import type { Map, MapMouseEvent } from "maplibre-gl";
 
 import type { MapSelection } from "../types/selection";
-import { createReportPopupContent } from "../lib/popupContent";
 import { createRiskZonePopupContent } from "../../risk-zones/lib/popupContent";
 
 interface MapSelectionPopupProps {
@@ -13,12 +12,12 @@ interface MapSelectionPopupProps {
 }
 
 /**
- * Presentación temporal de la selección activa mediante un popup de MapLibre.
+ * Presentación temporal de la zona seleccionada mediante un popup de MapLibre.
  *
- * No detecta elementos ni conoce los datos del dominio: solo recibe la
- * selección ya resuelta y la pinta. Cuando exista el diseño definitivo, este
- * componente puede reemplazarse por un panel lateral o bottom sheet sin tocar
- * la detección ni el estado de selección.
+ * No detecta zonas ni conoce los datos del dominio: solo recibe la selección ya
+ * resuelta y la pinta. Cuando exista el diseño definitivo, este componente puede
+ * reemplazarse por un panel lateral o bottom sheet sin tocar la detección ni el
+ * estado de selección.
  */
 export default function MapSelectionPopup({
   map,
@@ -57,8 +56,7 @@ export default function MapSelectionPopup({
   }, [map]);
 
   // Cierra la selección al hacer clic en el fondo del mapa. Un manejador de
-  // capa (zonas de riesgo) llama a `preventDefault()` para no cerrar; los
-  // marcadores detienen la propagación del DOM y no generan clic de mapa.
+  // capa (zonas) llama a `preventDefault()` para no cerrar.
   useEffect(() => {
     if (!map) return;
 
@@ -83,11 +81,7 @@ export default function MapSelectionPopup({
       return;
     }
 
-    const content =
-      selection.kind === "report"
-        ? createReportPopupContent(selection.report)
-        : createRiskZonePopupContent(selection.zone);
-
+    const content = createRiskZonePopupContent(selection.zone);
     popup.setDOMContent(content).setLngLat(selection.lngLat);
     if (!popup.isOpen()) popup.addTo(map);
   }, [map, selection]);

@@ -1,21 +1,32 @@
-import type { RiskLevel } from "../types/riskZone";
+import type { RiskLevel, ZoneStatus } from "../types/riskZone";
 
-export const RISK_FILL_COLORS: Record<RiskLevel, string> = {
-  low: "#22c55e",
-  medium: "#f59e0b",
-  high: "#ef4444",
+/**
+ * Colores del estado visual público.
+ * Amarillo = zona de riesgo por huracán; rojo = zona inundada confirmada.
+ * Los valores de la paleta están pendientes de formalizar en el sistema de
+ * diseño; se centralizan aquí para no dispersarlos.
+ */
+export const STATUS_FILL_COLORS: Record<ZoneStatus, string> = {
+  at_risk: "#facc15",
+  flooded: "#ef4444",
 };
 
-export const RISK_BORDER_COLORS: Record<RiskLevel, string> = {
-  low: "#15803d",
-  medium: "#b45309",
-  high: "#b91c1c",
+export const STATUS_BORDER_COLORS: Record<ZoneStatus, string> = {
+  at_risk: "#ca8a04",
+  flooded: "#b91c1c",
 };
 
+export const STATUS_LABELS: Record<ZoneStatus, string> = {
+  at_risk: "Zona de riesgo por huracán",
+  flooded: "Zona inundada",
+};
+
+export const ZONE_STATUSES: ZoneStatus[] = ["at_risk", "flooded"];
+
+/** Etiquetas del nivel de riesgo histórico (contexto, no estado visual). */
 export const RISK_LABELS: Record<RiskLevel, string> = {
   low: "Bajo",
   medium: "Medio",
   high: "Alto",
+  unknown: "Sin clasificar",
 };
-
-export const RISK_LEVELS: RiskLevel[] = ["low", "medium", "high"];
