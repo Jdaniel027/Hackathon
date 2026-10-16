@@ -1,10 +1,11 @@
-import type { MapaResponse, ZonaRiesgoMapa } from "../types/mapaApi";
+import type { MapaResponse, ZonaMapa, ZonaRiesgoMapa } from "../types/mapaApi";
 import type {
   RiskZoneCollection,
   RiskZoneFeature,
   ZoneStatus,
 } from "../types/riskZone";
 import { createCirclePolygon } from "./circle";
+import { createSquarePolygon } from "./rectangle";
 
 const CIRCLE_STEPS = 64;
 
@@ -27,7 +28,20 @@ export function riskStatusFromRiskZone(
   return null;
 }
 
-/** Nombre legible de la zona; el backend no expone uno. */
+/**
+ * Traduce el `estado` de un cuadro de la malla (`ZonaMapa`) al estado visual:
+ *
+ * - `INUNDADO` → `flooded` (rojo): lluvia por encima del umbral de inundación.
+ * - `PRECAUCION` → sin estado público por ahora: D-007 reserva el amarillo a
+ *   huracán, así que la precaución por lluvia no se pinta hasta que producto
+ *   decida su color/rótulo (ver propuesta D-009). Devuelve `null`.
+ * - `NORMAL` / `SIN_DATOS` → sin estado público (`null`).
+ */
+export function zonaStatusFromZona(zona: ZonaMapa): ZoneStatus | null {
+  return zona.estado === "INUNDADO" ? "flooded" : null;
+}
+
+/** Nombre legible de la zona de riesgo; el backend no expone uno. */
 function riskZoneName(risk: ZonaRiesgoMapa): string {
   if (risk.origen === "CICLON") return "Riesgo por huracán";
   if (risk.motivo === "INUNDACION") return "Zona inundada";
@@ -57,18 +71,45 @@ export function adaptRiskZone(risk: ZonaRiesgoMapa): RiskZoneFeature | null {
 }
 
 /**
+ * Convierte un cuadro de la malla (`ZonaMapa`) en una feature dibujable: un
+ * cuadrado de `ladoM` metros centrado en `(latCentro, lngCentro)` cuando su
+ * `estado` tiene un color público (`INUNDADO`). Conserva la lluvia medida.
+ */
+export function adaptZona(zona: ZonaMapa): RiskZoneFeature | null {
+  const status = zonaStatusFromZona(zona);
+  if (!status) return null;
+
+  return {
+    type: "Feature",
+    geometry: createSquarePolygon(zona.latCentro, zona.lngCentro, zona.ladoM),
+    properties: {
+      id: `zona-${zona.id}`,
+      name: "Cuadro de malla inundado",
+      status,
+      rainMm1h: zona.mm1h,
+      rainMm24h: zona.mm24h,
+    },
+  };
+}
+
+/**
  * Adapta la respuesta de `GET /api/v1/mapa/:municipioSlug` a la colección que
- * dibuja el mapa.
+ * dibuja el mapa:
  *
- * Alcance actual: solo `zonasRiesgo` (las que traen **punto de origen +
- * radio/circunferencia**). Las `zonas` de la malla y el motivo `ALTURA` quedan
- * pendientes de decisión de producto y no se representan todavía.
+ * - `zonasRiesgo[]` (círculos: punto de origen + radio) → `riesgo-<id>`.
+ * - `zonas[]` (cuadros de la malla) → `zona-<id>`, solo si su estado tiene
+ *   color público (`INUNDADO`). `PRECAUCION`/`NORMAL`/`SIN_DATOS` se omiten
+ *   hasta que se decida su color (ver D-009). Los ids llevan prefijo distinto
+ *   para que malla y riesgos nunca colisionen.
  */
 export function adaptMapaResponse(mapa: MapaResponse): RiskZoneCollection {
-  // Defensivo: una respuesta sin `zonasRiesgo` no debe romper el render.
-  const features = (mapa.zonasRiesgo ?? [])
+  // Defensivo: una respuesta sin `zonas`/`zonasRiesgo` no debe romper el render.
+  const zonas = (mapa.zonas ?? [])
+    .map(adaptZona)
+    .filter((feature): feature is RiskZoneFeature => feature !== null);
+  const riesgos = (mapa.zonasRiesgo ?? [])
     .map(adaptRiskZone)
     .filter((feature): feature is RiskZoneFeature => feature !== null);
 
-  return { type: "FeatureCollection", features };
+  return { type: "FeatureCollection", features: [...zonas, ...riesgos] };
 }

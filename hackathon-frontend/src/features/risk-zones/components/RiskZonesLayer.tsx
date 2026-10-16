@@ -87,8 +87,6 @@ interface RiskZonesLayerProps {
   loading: boolean;
   /** Error de la última carga, o `null`. */
   error: string | null;
-  /** Los datos en pantalla son de demostración (el backend no respondió). */
-  demo: boolean;
   statusVisibility: StatusVisibility;
   onToggleStatus: (status: ZoneStatus) => void;
   onSelectZone: (zone: RiskZoneProperties, lngLat: [number, number]) => void;
@@ -106,7 +104,6 @@ export default function RiskZonesLayer({
   data,
   loading,
   error,
-  demo,
   statusVisibility,
   onToggleStatus,
   onSelectZone,
@@ -309,7 +306,6 @@ export default function RiskZonesLayer({
         <RiskZonesFilters
           statusVisibility={statusVisibility}
           onToggleStatus={onToggleStatus}
-          demo={demo}
         />
       )}
 
@@ -322,12 +318,12 @@ export default function RiskZonesLayer({
         </p>
       )}
 
-      {!loading && demo && (
+      {!loading && error && (
         <p
-          role="status"
-          className="pointer-events-auto max-w-44 rounded-md bg-amber-50/95 p-2 text-[10px] leading-tight text-amber-800 shadow ring-1 ring-amber-200"
+          role="alert"
+          className="pointer-events-auto max-w-44 rounded-md bg-red-50/95 p-2 text-[10px] leading-tight text-red-700 shadow ring-1 ring-red-200"
         >
-          {error ?? "Datos de demostración."}
+          {error}
         </p>
       )}
 
@@ -340,7 +336,7 @@ export default function RiskZonesLayer({
         </p>
       )}
 
-      {isEmpty && (
+      {!loading && !error && isEmpty && (
         <p
           role="status"
           className="pointer-events-auto max-w-44 rounded-md bg-white/95 p-2 text-[10px] leading-tight text-slate-500 shadow ring-1 ring-slate-200"

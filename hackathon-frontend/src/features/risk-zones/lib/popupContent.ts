@@ -34,6 +34,17 @@ export function createRiskZonePopupContent(zone: RiskZoneProperties): HTMLElemen
     container.append(radius);
   }
 
+  // Cuadro de la malla: lluvia medida por el backend (contrato `ZonaMapa`).
+  if (
+    typeof zone.rainMm1h === "number" &&
+    typeof zone.rainMm24h === "number"
+  ) {
+    const rain = document.createElement("p");
+    rain.className = "text-xs text-slate-500";
+    rain.textContent = `Lluvia: ${zone.rainMm1h} mm/1 h · ${zone.rainMm24h} mm/24 h`;
+    container.append(rain);
+  }
+
   if (zone.description) {
     const description = document.createElement("p");
     description.className = "text-xs text-slate-500";

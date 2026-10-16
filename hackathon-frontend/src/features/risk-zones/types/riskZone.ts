@@ -37,6 +37,12 @@ export interface RiskZoneProperties {
   origin?: RiskZoneOrigin;
   /** Radio en metros de la zona circular (`ZonaRiesgoMapa.radioM`). */
   radiusM?: number;
+  /**
+   * Lluvia registrada por el backend en el cuadro de malla (`ZonaMapa.mm1h` /
+   * `mm24h`). Solo la traen las features de la malla, no las de riesgo.
+   */
+  rainMm1h?: number;
+  rainMm24h?: number;
 }
 
 export type RiskZoneGeometry = Polygon | MultiPolygon;

@@ -8,8 +8,6 @@ import { useUserLocation } from "../hooks/useUserLocation";
 import { useUserLocationMarker } from "../hooks/useUserLocationMarker";
 import { MAP_CONFIG } from "../config/map.config";
 import RiskZonesLayer from "../../risk-zones/components/RiskZonesLayer";
-import StatusTransitionDemo from "../../risk-zones/components/StatusTransitionDemo";
-import { hasVisibleStatus } from "../../risk-zones/lib/zoneFilters";
 import { useRiskZones } from "../../risk-zones/hooks/useRiskZones";
 import { useZoneFilters } from "../../risk-zones/hooks/useZoneFilters";
 import type { MapSelection } from "../types/selection";
@@ -26,8 +24,9 @@ import type {
  */
 export default function MapView() {
   const { containerRef, map, ready, error } = useMapInstance();
-  const { zones, loading, error: zonesError, source, transitionFirstZone } =
-    useRiskZones(MAP_CONFIG.municipioSlug);
+  const { zones, loading, error: zonesError } = useRiskZones(
+    MAP_CONFIG.municipioSlug,
+  );
   const { statusVisibility, toggleStatus } = useZoneFilters();
   const { status: locationStatus, coordinates, locate } = useUserLocation();
 
@@ -66,48 +65,23 @@ export default function MapView() {
     [toggleStatus],
   );
 
-  // Transición mock (F1-04): alterna el estado de la primera zona sin recrear
-  // el mapa, y reajusta el popup si esa zona estaba seleccionada.
-  const handleCycleFirstZone = useCallback(() => {
-    const updated = transitionFirstZone();
-    setSelection((current) => {
-      if (!current) return current;
-      const nextZone = updated.features.find(
-        (feature) => feature.properties.id === current.zone.id,
-      );
-      // Si el nuevo estado queda oculto por su filtro, cerrar el popup.
-      if (!nextZone || !statusVisibility[nextZone.properties.status]) {
-        return null;
-      }
-      return { ...current, zone: nextZone.properties };
-    });
-  }, [transitionFirstZone, statusVisibility]);
-
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
       <MapStatusOverlay ready={ready} error={error} />
 
-      {/* Fuente de datos separada de la representación (F1-20): la API real con
-          respaldo en datos de demostración si el backend no responde. */}
+      {/* Datos reales del backend (`GET /api/v1/mapa/:municipioSlug`); sin
+          respaldo simulado. */}
       <RiskZonesLayer
         map={map}
         data={zones}
         loading={loading}
         error={zonesError}
-        demo={source === "mock"}
         statusVisibility={statusVisibility}
         onToggleStatus={handleToggleStatus}
         onSelectZone={handleSelectZone}
       />
-
-      {zones.features.length > 0 && hasVisibleStatus(statusVisibility) && (
-        <StatusTransitionDemo
-          zones={zones}
-          onCycleFirstZone={handleCycleFirstZone}
-        />
-      )}
 
       <MapSelectionPopup
         map={map}

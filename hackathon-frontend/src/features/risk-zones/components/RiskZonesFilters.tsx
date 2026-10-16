@@ -14,7 +14,7 @@ interface RiskZonesFiltersProps {
   statusVisibility: StatusVisibility;
   onToggleStatus: (status: ZoneStatus) => void;
 }
-2;
+
 /**
  * Menú de filtros en forma de botón desplegable (F1-06). Colapsado muestra
  * solo el botón «Filtros»; al pulsarlo despliega las dos opciones
@@ -95,9 +95,6 @@ export default function RiskZonesFilters({
               );
             })}
           </ul>
-          <p className="mt-1 max-w-36 px-2 text-[10px] leading-tight text-slate-400">
-            Zonas de demostración — no representan estados verificados
-          </p>
         </div>
       )}
     </div>

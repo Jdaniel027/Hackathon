@@ -1,44 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { fetchMapa } from "../../../services/mapaService";
-import { MOCK_RISK_ZONES } from "../data/mockRiskZones";
 import { adaptMapaResponse } from "../lib/mapaAdapter";
-import { applyZoneStatus } from "../lib/zoneTransitions";
-import type { RiskZoneCollection, ZoneStatus } from "../types/riskZone";
+import type { RiskZoneCollection } from "../types/riskZone";
 
-/** De dónde salieron las zonas que se están dibujando. */
-export type RiskZoneSource = "api" | "mock";
+/** Colección vacía: estado inicial antes de que responda la API. */
+const EMPTY_ZONES: RiskZoneCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
 
 interface UseRiskZonesResult {
+  /** Zonas devueltas por el backend (vacío mientras no haya respuesta). */
   zones: RiskZoneCollection;
   /** Hay una petición en curso. */
   loading: boolean;
   /** Mensaje de error de la última carga, o `null`. */
   error: string | null;
-  /** `"api"` si respondió el backend; `"mock"` si se usaron datos de demostración. */
-  source: RiskZoneSource;
   /** Reintenta la carga desde el backend. */
   refresh: () => void;
-  /**
-   * Alterna el estado de la primera zona (transición mock de F1-04) sin
-   * recrear el mapa. Devuelve la colección actualizada para coordinar la
-   * selección. No es flujo público; se retirará cuando el backend confirme.
-   */
-  transitionFirstZone: () => RiskZoneCollection;
 }
 
 /**
  * Carga las zonas de riesgo desde `GET /api/v1/mapa/:municipioSlug` (F1-20).
  *
- * Mientras la petición está en curso mantiene los datos de demostración para no
- * dejar el mapa vacío. Si el backend no responde, conserva el mock marcado como
- * `source: "mock"` para que la UI pueda avisar que son datos de demostración.
+ * Trabaja **solo con datos reales**: no hay respaldo simulado, para no pintar
+ * zonas inventadas en el mapa. Mientras la petición está en curso, o si el
+ * backend no responde, la colección queda vacía y la capa avisa del estado.
  */
 export function useRiskZones(municipioSlug: string): UseRiskZonesResult {
-  const [zones, setZones] = useState<RiskZoneCollection>(MOCK_RISK_ZONES);
+  const [zones, setZones] = useState<RiskZoneCollection>(EMPTY_ZONES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<RiskZoneSource>("mock");
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -48,18 +41,17 @@ export function useRiskZones(municipioSlug: string): UseRiskZonesResult {
       .then((mapa) => {
         if (controller.signal.aborted) return;
         setZones(adaptMapaResponse(mapa));
-        setSource("api");
         setError(null);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
-        // Sin backend accesible: se mantiene el mock (claramente identificado
-        // en la UI) para que el mapa siga siendo demostrable.
-        setZones(MOCK_RISK_ZONES);
-        setSource("mock");
+        setZones(EMPTY_ZONES);
+        const detalle = cause instanceof Error ? cause.message : "";
         setError(
-          "No se pudo conectar con el backend; se muestran datos de demostración.",
+          detalle
+            ? `No se pudieron cargar las zonas del backend (${detalle}).`
+            : "No se pudieron cargar las zonas del backend.",
         );
         setLoading(false);
       });
@@ -76,16 +68,5 @@ export function useRiskZones(municipioSlug: string): UseRiskZonesResult {
     setReloadToken((token) => token + 1);
   }, []);
 
-  const transitionFirstZone = useCallback(() => {
-    const zone = zones.features[0];
-    if (!zone) return zones;
-
-    const nextStatus: ZoneStatus =
-      zone.properties.status === "at_risk" ? "flooded" : "at_risk";
-    const updated = applyZoneStatus(zones, zone.properties.id, nextStatus);
-    setZones(updated);
-    return updated;
-  }, [zones]);
-
-  return { zones, loading, error, source, refresh, transitionFirstZone };
+  return { zones, loading, error, refresh };
 }

@@ -116,6 +116,45 @@
 - Impacto: no cambia el modelo de dos colores ni el contrato de `status`; sí la procedencia de cada estado. F2 y backend deben aplicar que la aprobación de reportes solo genere `flooded`.
 - Aprobación: decisión del producto (precisa el alcance de D-002).
 
+## D-008 — Mapeo de `ZonaRiesgoMapa` (backend) a los estados visuales
+
+- Estado: PROPUESTO
+- Fecha: 2026-10-16
+- Contexto: el backend expone las zonas de riesgo como `ZonaRiesgoMapa { lat, lng, radioM, motivo, origen, venceEn }` (`hackaton-backend/docs/API_MANUAL.md` §2–3 y `src/modules/zonas/zonas.types.ts`), con `motivo` (`ALTURA` | `INUNDACION`) y `origen` (`MANUAL` | `CICLON` | `CLIMA`). El frontend (D-002 / D-007) solo tiene dos estados públicos: `at_risk` (amarillo) y `flooded` (rojo). No existía un mapeo acordado entre el contrato del backend y esos dos estados.
+- Decisión propuesta (implementada en `features/risk-zones/lib/mapaAdapter.ts`):
+  - `origen === "CICLON"` → `at_risk` (amarillo), por ser riesgo de huracán (coherente con D-007).
+  - `motivo === "INUNDACION"` → `flooded` (rojo), sin importar el `origen` (clima o reportes corroborados).
+  - `motivo === "ALTURA"` → **sin estado público**: no se dibuja hasta que producto defina su color/rótulo (D-007 reserva el amarillo a huracán y el rojo a inundación).
+- Geometría: cada `ZonaRiesgoMapa` se aproxima a un polígono GeoJSON (círculo por punto de origen + radio, `lib/circle.ts`, con `M_PER_DEGREE = 111 320`) y se conserva `origin`/`radiusM` para dibujar el punto de origen y mostrar el radio en el detalle.
+- Alcance: solo `zonasRiesgo`. Las cuadrículas de `zonas[]` (`estado`: `SIN_DATOS` | `NORMAL` | `PRECAUCION` | `INUNDADO`) y su mapeo quedan pendientes de decisión.
+- Alternativas: derivar el estado solo de `motivo` (ignora el huracán de D-007); dibujar `ALTURA` con un tercer color (no aprobado); no dibujar nada hasta cerrar el contrato (retrasa la integración real).
+- Impacto: primera integración real backend→mapa (F1-20). Sustituye la colección mock escrita a mano por una derivada del contrato. Si el mapeo cambia, el único punto a modificar es el adaptador.
+- Aprobado por: PENDIENTE (requiere confirmación de producto/backend).
+
+## D-009 — Mapeo de `ZonaMapa` (malla de lluvia) a los estados visuales
+
+- Estado: PROPUESTO
+- Fecha: 2026-10-16
+- Contexto: el backend devuelve además `zonas[]` (`ZonaMapa`), los cuadros de la malla por lluvia, con `estado` (`SIN_DATOS` | `NORMAL` | `PRECAUCION` | `INUNDADO`), `mm1h` y `mm24h` (`hackaton-backend/docs/API_MANUAL.md` §2–3). El manual indica dibujarlos con rectángulos. El frontend solo tiene dos estados públicos: `at_risk` (amarillo, **exclusivo de huracán** por D-007) y `flooded` (rojo).
+- Decisión propuesta (implementada en `features/risk-zones/lib/mapaAdapter.ts` → `zonaStatusFromZona`):
+  - `INUNDADO` → `flooded` (rojo): lluvia por encima del umbral de inundación del backend (`≥ 40 mm/1 h` o `≥ 100 mm/24 h`).
+  - `PRECAUCION`, `NORMAL`, `SIN_DATOS` → **sin estado público**: no se pintan. El amarillo está reservado a huracán y el sistema de diseño solo define dos colores de estado; falta un color/rótulo aprobado para la precaución por lluvia.
+- Geometría: cada cuadro se dibuja como un polígono GeoJSON cuadrado (`lib/rectangle.ts`) a partir de `latCentro`/`lngCentro` + `ladoM`, con la misma aproximación plana que el backend. Los ids van prefijados (`zona-<id>` vs `riesgo-<id>`) para no colisionar con los círculos de `zonasRiesgo`.
+- Alcance: la malla entra en la misma colección y en los mismos filtros que los riesgos (evita una tercera capa). Bajo el filtro «Inundadas» quedan tanto los cuadros `INUNDADO` como los círculos de inundación.
+- Puntos a confirmar: (1) si pintar la malla `INUNDADO` de rojo es correcto cuando la procedencia no es un reporte confirmado (D-007 define `flooded` como inundación confirmada); (2) qué color/rótulo (si alguno) corresponde a `PRECAUCION`; (3) si se quiere una retícula visible también para los cuadros sin estado público (hoy invisibles).
+- Impacto: hace visibles los datos reales de la malla (p. ej. tras `POST /admin/simular-lluvia`). No añade capas ni colores nuevos; se apoya en los dos estados existentes.
+- Aprobado por: PENDIENTE (requiere confirmación de producto).
+
+## D-010 — El mapa usa solo datos reales del backend (sin respaldo simulado)
+
+- Estado: PROPUESTO
+- Fecha: 2026-10-16
+- Contexto: con la integración real en marcha (D-008 / D-009), `useRiskZones` mantenía `MOCK_RISK_ZONES` como estado inicial **y** como respaldo cuando `GET /api/v1/mapa/:municipioSlug` fallaba, marcado con `source: "mock"` y un aviso «Datos de demostración». Eso pintaba dos círculos ficticios (huracán + inundación) y podía confundir datos inventados con reales o tapar fallos de integración.
+- Decisión: retirar los datos simulados del flujo del mapa. El hook arranca con una colección vacía y, si la API falla, deja el mapa sin zonas y muestra un aviso de error (no pinta zonas inventadas). Se eliminan `data/mockMapa.ts`, `data/mockRiskZones.ts` y las props `source`/`demo`.
+- Alternativas: mantener el respaldo mock (riesgo de datos ficticios presentados como reales); dejarlo solo en desarrollo tras una bandera de entorno.
+- Impacto: sin backend en marcha el mapa aparece vacío con un mensaje de error (comportamiento esperado). La demo exige el backend corriendo y sembrado. No cambia el contrato ni los estados visuales.
+- Aprobado por: PENDIENTE (requiere confirmación de producto).
+
 ## Plantilla
 
 ### D-XXX — Título

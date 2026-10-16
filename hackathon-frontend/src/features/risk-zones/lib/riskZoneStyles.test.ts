@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { MOCK_RISK_ZONES } from "../data/mockRiskZones";
 import {
   STATUS_FILL_COLORS,
   STATUS_LABELS,
@@ -23,20 +22,5 @@ describe("estado visual de zonas (F1-03)", () => {
     for (const status of ZONE_STATUSES) {
       expect(STATUS_LABELS[status]).toBeTruthy();
     }
-  });
-});
-
-describe("colección de zonas simulada", () => {
-  it("no duplica la identidad de una misma zona", () => {
-    const ids = MOCK_RISK_ZONES.features.map((feature) => feature.properties.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("incluye una zona de riesgo y una inundada", () => {
-    const statuses = MOCK_RISK_ZONES.features.map(
-      (feature) => feature.properties.status,
-    );
-    expect(statuses).toContain("at_risk");
-    expect(statuses).toContain("flooded");
   });
 });
