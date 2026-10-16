@@ -63,7 +63,7 @@ export class AdminController {
 
   @Post('ciclon')
   @ApiOperation({
-    summary: 'Registro de ciclón pendiente de integración (501)',
+    summary: 'Registra un riesgo de ciclón manual para la demo',
   })
   registrarCiclon(
     @Body() dto: RegistrarCiclonDto,

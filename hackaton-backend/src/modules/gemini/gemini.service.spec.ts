@@ -34,32 +34,34 @@ describe('GeminiService', () => {
   });
 
   it('pide JSON estructurado con la instrucción del clasificador', async () => {
-    conRespuesta(JSON.stringify({ clasificacion: 'NORMAL' }));
+    conRespuesta(JSON.stringify({ clasificacion: 'NO_INUNDADO' }));
 
-    await expect(servicio.clasificarFoto(Buffer.from('foto'), 'image/jpeg')).resolves.toBe(
-      'NORMAL',
-    );
+    await expect(
+      servicio.clasificarFoto(Buffer.from('foto'), 'image/jpeg'),
+    ).resolves.toBe('NO_INUNDADO');
 
     expect(constructores.at(-1)).toEqual({ apiKey: CLAVE });
     expect(generateContent).toHaveBeenCalledTimes(1);
 
     const llamada = generateContent.mock.calls[0][0] as {
       model: string;
-      config: { systemInstruction: string; responseMimeType: string; responseSchema: { properties: { clasificacion: { enum: string[] } } } };
+      config: {
+        systemInstruction: string;
+        responseMimeType: string;
+        responseSchema: { properties: { clasificacion: { enum: string[] } } };
+      };
     };
-    expect(llamada.model).toBe('gemini-1.5-flash');
+    expect(llamada.model).toBe('gemini-3.8-flash');
     expect(llamada.config.responseMimeType).toBe('application/json');
-    expect(llamada.config.responseSchema.properties.clasificacion.enum).toEqual([
-      'INUNDADO',
-      'PRECAUCION',
-      'NORMAL',
-    ]);
+    expect(llamada.config.responseSchema.properties.clasificacion.enum).toEqual(
+      ['INUNDADO', 'PARCIAL', 'NO_INUNDADO'],
+    );
     expect(llamada.config.systemInstruction).toContain('INUNDADO');
-    expect(llamada.config.systemInstruction).toContain('PRECAUCION');
-    expect(llamada.config.systemInstruction).toContain('NORMAL');
+    expect(llamada.config.systemInstruction).toContain('PARCIAL');
+    expect(llamada.config.systemInstruction).toContain('NO_INUNDADO');
   });
 
-  it.each(['INUNDADO', 'PRECAUCION', 'NORMAL'] as const)(
+  it.each(['INUNDADO', 'PARCIAL', 'NO_INUNDADO'] as const)(
     'devuelve la clasificación válida %s',
     async (clasificacion) => {
       conRespuesta(JSON.stringify({ clasificacion }));
@@ -70,12 +72,14 @@ describe('GeminiService', () => {
   );
 
   it('envía la imagen en base64 con su tipo MIME', async () => {
-    conRespuesta(JSON.stringify({ clasificacion: 'NORMAL' }));
+    conRespuesta(JSON.stringify({ clasificacion: 'NO_INUNDADO' }));
 
     await servicio.clasificarFoto(Buffer.from('hola'), 'image/png');
 
     const llamada = generateContent.mock.calls[0][0] as {
-      contents: Array<{ parts: Array<{ inlineData: { mimeType: string; data: string } }> }>;
+      contents: Array<{
+        parts: Array<{ inlineData: { mimeType: string; data: string } }>;
+      }>;
     };
     const parte = llamada.contents[0].parts[0];
     expect(parte.inlineData.mimeType).toBe('image/png');
@@ -123,6 +127,27 @@ describe('GeminiService', () => {
       status: 503,
       response: { code: 'GEMINI_NO_DISPONIBLE' },
     });
+  });
+
+  it('reintenta una vez si Gemini devuelve error 503 y luego clasifica', async () => {
+    generateContent.mockRejectedValueOnce(
+      Object.assign(new Error('temporal'), { status: 503 }),
+    );
+    conRespuesta(JSON.stringify({ clasificacion: 'PARCIAL' }));
+    await expect(
+      servicio.clasificarFoto(Buffer.from('foto'), 'image/jpeg'),
+    ).resolves.toBe('PARCIAL');
+    expect(generateContent).toHaveBeenCalledTimes(2);
+  });
+
+  it('no reintenta un 400 del proveedor', async () => {
+    generateContent.mockRejectedValueOnce(
+      Object.assign(new Error('invalid'), { status: 400 }),
+    );
+    await expect(
+      servicio.clasificarFoto(Buffer.from('foto'), 'image/jpeg'),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
   it('rechaza con 415 un MIME no permitido sin llamar al proveedor', async () => {

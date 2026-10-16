@@ -3,10 +3,10 @@ import { Cron } from '@nestjs/schedule';
 import { APP_ERRORS } from '../../common/exception/app-exception.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { OpenMeteoService } from '../open-meteo/open-meteo.service.js';
+import { ConaguaService } from '../conagua/conagua.service.js';
 import type { LluviaZona } from '../open-meteo/open-meteo.service.js';
 import { calcularEstado, umbralesPara } from '../zonas/constants/umbrales.js';
 import { M_POR_GRADO } from '../zonas/utils/geo.util.js';
-import { clasificacionBdAFoto } from '../reportes/utils/clasificacion-bd.util.js';
 import type { EstadoZonaApi } from '../zonas/zonas.types.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 
@@ -44,10 +44,19 @@ const RECENCIA_LECTURA_MS = 60 * 60 * 1000; // 60 min
 const RADIO_RIESGO_INUNDACION_M = 500;
 // Open-Meteo admite hasta 100 coordenadas por petición: se procesa por lotes.
 const LOTE_ZONAS = 100;
+const MAX_EDAD_PRONOSTICO_MS = 2 * 60 * 60 * 1000;
+const ZONAS_HORARIAS_MX = [
+  'America/Tijuana',
+  'America/Hermosillo',
+  'America/Mexico_City',
+  'America/Cancun',
+] as const;
 
 // Zona con la relación de municipio que necesitan los jobs.
 type ZonaConMunicipio = Prisma.ZonaGetPayload<{
-  include: { municipio: { select: { slug: true } } };
+  include: {
+    municipio: { select: { slug: true; idEstadoSmn: true; idMunSmn: true } };
+  };
 }>;
 
 type ReporteConZona = Prisma.ReporteGetPayload<{
@@ -65,6 +74,7 @@ export class CronsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly openMeteo: OpenMeteoService,
+    private readonly conagua: ConaguaService,
   ) {}
 
   // Cada 15 minutos: Open-Meteo → Zona + LecturaClima.
@@ -112,7 +122,11 @@ export class CronsService {
 
   private async jobActualizarClima(): Promise<ResultadoCron> {
     const zonas = await this.prisma.zona.findMany({
-      include: { municipio: { select: { slug: true } } },
+      include: {
+        municipio: {
+          select: { slug: true, idEstadoSmn: true, idMunSmn: true },
+        },
+      },
       orderBy: { id: 'asc' },
     });
 
@@ -156,7 +170,11 @@ export class CronsService {
           continue;
         }
 
-        const estado = await this.resolverEstado(zona, lluvia.mm1h, lluvia.mm24h);
+        const estado = await this.resolverEstado(
+          zona,
+          lluvia.mm1h,
+          lluvia.mm24h,
+        );
 
         await this.prisma.$transaction([
           this.prisma.lecturaClima.create({
@@ -193,7 +211,9 @@ export class CronsService {
       ejecutado: actualizadas > 0 || lotesFallidos === 0,
       nota:
         `${actualizadas}/${zonas.length} zonas actualizadas con Open-Meteo.` +
-        (lotesFallidos > 0 ? ` ${lotesFallidos} lote(s) fallaron; se conserva el último dato.` : ''),
+        (lotesFallidos > 0
+          ? ` ${lotesFallidos} lote(s) fallaron; se conserva el último dato.`
+          : ''),
       detalle: { zonas: zonas.length, actualizadas, lotesFallidos, conagua },
     };
   }
@@ -214,10 +234,10 @@ export class CronsService {
     }
 
     const previa = await this.prisma.lecturaClima.findFirst({
-      where: { zonaId: zona.id },
+      where: { zonaId: zona.id, fuente: 'OPEN_METEO' },
       orderBy: { creadoEn: 'desc' },
     });
-    if (!previa) {
+    if (!previa || previa.mm24h === null) {
       return actual;
     }
 
@@ -225,13 +245,55 @@ export class CronsService {
     return SEVERIDAD[objetivoPrevio] <= SEVERIDAD[objetivo] ? objetivo : actual;
   }
 
-  // Apoyo por municipio (Conagua/SMN). Se implementa en la Fase 4.
   private async registrarApoyoConagua(
-    _zonas: ZonaConMunicipio[],
+    zonas: ZonaConMunicipio[],
   ): Promise<{ municipios: number; lecturas: number }> {
-    // TODO(DEVELOPER_V, Fase 4): descargar method=3, filtrar por ides/idmun y
-    // persistir LecturaClima(CONAGUA) de apoyo. No inventar datos si falla.
-    return { municipios: 0, lecturas: 0 };
+    const grupos = new Map<string, ZonaConMunicipio[]>();
+    for (const zona of zonas) {
+      const { idEstadoSmn, idMunSmn } = zona.municipio;
+      if (idEstadoSmn == null || idMunSmn == null) continue;
+      const clave = `${idEstadoSmn}:${idMunSmn}`;
+      grupos.set(clave, [...(grupos.get(clave) ?? []), zona]);
+    }
+    if (!grupos.size) return { municipios: 0, lecturas: 0 };
+
+    try {
+      const ids = [...grupos.values()].map(([zona]) => ({
+        idEstadoSmn: zona.municipio.idEstadoSmn!,
+        idMunSmn: zona.municipio.idMunSmn!,
+      }));
+      const pronosticos = await this.conagua.getPronosticosPorHora(ids);
+      let lecturas = 0;
+      for (const [clave, zonasMunicipio] of grupos) {
+        const horas = (pronosticos.get(clave) ?? [])
+          .filter((dato) => dato.nhor >= 0)
+          .sort((a, b) => a.nhor - b.nhor);
+        if (
+          !horas.length ||
+          horas[0].nhor !== 0 ||
+          !this.pronosticoVigente(horas[0].hloc)
+        )
+          continue;
+        const mm1h = horas[0].prec;
+        // Lectura horaria de apoyo en una zona representativa; NO modifica el estado de Zona.
+        await this.prisma.lecturaClima.create({
+          data: {
+            zonaId: zonasMunicipio[0].id,
+            mm1h,
+            mm24h: null,
+            fuente: 'CONAGUA',
+          },
+        });
+        lecturas += 1;
+      }
+      return { municipios: grupos.size, lecturas };
+    } catch (error) {
+      this.logger.warn(
+        'Conagua no disponible; se conservan las lecturas anteriores.',
+        error,
+      );
+      return { municipios: grupos.size, lecturas: 0 };
+    }
   }
 
   // ─── reevaluarReportes ────────────────────────────────────────────────────
@@ -252,21 +314,19 @@ export class CronsService {
 
     for (const reporte of pendientes) {
       const lectura = await this.ultimaLecturaReciente(reporte.zonaId);
-      if (!lectura) {
+      if (!lectura || lectura.mm24h === null) {
         sinLectura += 1;
         continue;
       }
 
-      const clasificacion = reporte.clasificacion
-        ? clasificacionBdAFoto(reporte.clasificacion)
-        : null;
+      const clasificacion = reporte.clasificacion;
       const umbrales = umbralesPara(reporte.zona.municipio.slug);
       const superaUmbral =
         lectura.mm1h >= umbrales.precaucionMm1h ||
         lectura.mm24h >= umbrales.precaucionMm24h;
 
       if (
-        (clasificacion === 'INUNDADO' || clasificacion === 'PRECAUCION') &&
+        (clasificacion === 'INUNDADO' || clasificacion === 'PARCIAL') &&
         superaUmbral
       ) {
         await this.prisma.reporte.update({
@@ -310,7 +370,7 @@ export class CronsService {
 
   private async ultimaLecturaReciente(zonaId: number) {
     const lectura = await this.prisma.lecturaClima.findFirst({
-      where: { zonaId },
+      where: { zonaId, fuente: 'OPEN_METEO' },
       orderBy: { creadoEn: 'desc' },
     });
     if (!lectura) {
@@ -338,7 +398,8 @@ export class CronsService {
     });
 
     const existente = activos.find(
-      (riesgo) => this.distanciaM(lat, lng, riesgo.lat, riesgo.lng) <= riesgo.radioM,
+      (riesgo) =>
+        this.distanciaM(lat, lng, riesgo.lat, riesgo.lng) <= riesgo.radioM,
     );
 
     if (existente) {
@@ -403,6 +464,38 @@ export class CronsService {
 
   // ─── utilidades ───────────────────────────────────────────────────────────
 
+  private pronosticoVigente(hloc: string): boolean {
+    if (!/^\d{8}T\d{2}$/.test(hloc)) return false;
+    const horaPronostico = Date.UTC(
+      Number(hloc.slice(0, 4)),
+      Number(hloc.slice(4, 6)) - 1,
+      Number(hloc.slice(6, 8)),
+      Number(hloc.slice(9, 11)),
+    );
+    return ZONAS_HORARIAS_MX.some((timeZone) => {
+      const formateador = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      });
+      const partes = Object.fromEntries(
+        formateador
+          .formatToParts(new Date())
+          .map(({ type, value }) => [type, value]),
+      );
+      const horaLocal = Date.UTC(
+        Number(partes.year),
+        Number(partes.month) - 1,
+        Number(partes.day),
+        Number(partes.hour),
+      );
+      return Math.abs(horaLocal - horaPronostico) <= MAX_EDAD_PRONOSTICO_MS;
+    });
+  }
+
   private distanciaM(
     lat1: number,
     lng1: number,
@@ -411,7 +504,9 @@ export class CronsService {
   ): number {
     const dLat = (lat2 - lat1) * M_POR_GRADO;
     const dLng =
-      (lng2 - lng1) * M_POR_GRADO * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
+      (lng2 - lng1) *
+      M_POR_GRADO *
+      Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
     return Math.hypot(dLat, dLng);
   }
 
