@@ -1,29 +1,35 @@
-# Producto y MVP
-
-> Completar al recibir el reto. No inventar requisitos.
+# Producto y MVP — UrbanGO Flood
 
 ## Problema
-Pendiente.
+Durante episodios de lluvia e inundación, la población necesita distinguir zonas susceptibles de zonas con inundación actual confirmada sin confundir reportes sin verificar con hechos.
 
-## Usuario objetivo
-Pendiente.
+## Usuarios objetivo
+Personas que consultan el mapa desde su teléfono y ciudadanos que aportan reportes con fotografía.
 
 ## Propuesta de valor
-Pendiente.
+Mapa mobile-first con información de riesgo e inundación corroborada y un canal de reportes ciudadanos sujeto a verificación.
 
-## Flujo principal demostrable
-1. Pendiente.
-2. Pendiente.
-3. Pendiente.
+## Flujo demostrable
+1. Abrir mapa y filtrar zonas amarillas (riesgo) y rojas (inundadas).
+2. Tocar una zona y consultar su información y reportes confirmados asociados.
+3. Abrir formulario, seleccionar ubicación, adjuntar fotografía, indicar nivel y enviar; recibir acuse privado.
+4. Cuando backend confirme un cambio de estado, actualizar color, filtro y detalle de la zona.
 
-## Funcionalidades imprescindibles (MVP)
-- [ ] Pendiente.
+## MVP
+- [ ] Mapa MapLibre/GeoJSON y dos estados visuales excluyentes.
+- [ ] Dos filtros independientes, geolocalización y selección de zona.
+- [ ] Bottom Sheet compacto/resumen/expandido y reportes confirmados asociados.
+- [ ] Formulario anónimo con ubicación, fotografía y nivel observado; descripción opcional.
+- [ ] Verificación desde backend cuando haya evidencia suficiente; pendientes no públicos.
+- [ ] Integración con backend y manejo de errores, datos faltantes y carga.
 
 ## Fuera de alcance
-- Pendiente.
+Rutas alternativas, simulación manual de lluvia, capa de lluvia en tiempo real, autenticación, notificaciones push, panel administrativo y marcadores públicos de reportes.
 
-## Criterios de éxito y demo
-- Pendiente.
+## Criterios de éxito
+Demostración móvil end-to-end sin datos ficticios presentados como reales; cambio amarillo→rojo solo cuando backend lo confirme; build correcto y estados de error controlados.
 
-## Restricciones del concurso
-- Revisar reglas sobre código previo, IA, despliegue y uso de servicios externos.
+## Concurso
+Reglas sobre código previo, IA, despliegue y servicios externos: **pendientes de verificar**. No inventar restricciones.
+
+Fuente de detalle: `URBANGO_FLOOD_PLAN_DESARROLLO_ACTUALIZADO.md`.

@@ -1,27 +1,29 @@
-# Arquitectura aprobada
+# Arquitectura aprobada — UrbanGO Flood
 
-## Stack inicial (confirmar con el equipo)
-- Next.js App Router + React + TypeScript.
-- Tailwind CSS para estilos.
-- Backend externo consumido por HTTP; no duplicar lógica del backend en frontend.
-- No agregar gestión global de estado salvo necesidad demostrada.
+## Stack aprobado
+- React + Vite + TypeScript (no Next.js ni App Router).
+- MapLibre GL JS + GeoJSON para el mapa.
+- Backend externo vía HTTP; el frontend no calcula clasificación ni verifica reportes.
+- Mobile-first. Figma es referencia visual; no introducir Tailwind ni otra biblioteca de UI sin revisar las dependencias existentes y obtener aprobación.
+- Estado local React por defecto; gestión global solo con necesidad justificada.
 
-## Organización
-- `src/app/`: rutas, layouts y composición de páginas.
-- `src/components/ui/`: primitivas reutilizables.
-- `src/components/layout/`: navegación y estructura visual.
-- `src/features/<feature>/`: componentes y lógica específicos de una función.
-- `src/services/`: llamadas HTTP.
-- `src/types/`: tipos compartidos cuando aplique.
-- `src/lib/`: utilidades puras y configuración.
-- `src/hooks/`: hooks reutilizables.
+## Organización prevista (adaptar al repositorio real)
+- `src/app/App.tsx`: composición e integración acordada, F1.
+- `src/features/map/`: mapa, capas, selección, geolocalización y selector de ubicación, F1.
+- `src/features/risk-zones/`: representación geográfica y adaptación de zonas, F1.
+- `src/features/zone-details/`: Bottom Sheet y detalles, F2.
+- `src/features/reports/`: formulario, consultas, fotos y UI de reportes, F2.
+- `src/components/ui/`, `src/types/`, `src/lib/`, `src/hooks/`, `src/mocks/`: compartidos, cambios coordinados.
+- `src/services/`: cliente HTTP único y servicios acordados.
+- `src/layouts/`: composición visual, F2.
 
-## Reglas
-- Páginas delgadas: la lógica de una funcionalidad vive en `features/`.
-- Reutilizar antes de crear. No mover carpetas sin aprobación.
-- Un único cliente HTTP y URL base desde variables de entorno.
-- Datos simulados solo en mocks explícitos, nunca disfrazados de datos reales.
-- Mantener límites de Server y Client Components; `use client` solo cuando sea necesario.
+## Contratos y límites
+- Una zona GeoJSON tiene un estado visual excluyente `at_risk` (amarillo) o `flooded` (rojo), asignado por backend. No duplicar el polígono por estado.
+- Dos filtros independientes; ninguna capa pública de reportes.
+- Reportes `pending`/`rejected` privados; `confirmed` visibles solo en detalles de zonas asociadas.
+- `MapView` emite selección por ID; no controla Bottom Sheet. `LocationPicker` devuelve coordenadas al formulario por callback.
+- Mocks explícitos; endpoints definitivos únicamente después de acuerdo con backend.
+- No crear segundo mapa, cliente HTTP paralelo ni nuevas rutas sin aprobación.
 
-## Cambios arquitectónicos
-Registrar propuesta, motivo, impacto y aprobación en `DECISIONS.md` antes de implementar.
+## Cambios
+Registrar propuestas y aprobaciones en `DECISIONS.md` antes de cambios estructurales. Inspeccionar el código antes de aplicar este diseño de carpetas.
