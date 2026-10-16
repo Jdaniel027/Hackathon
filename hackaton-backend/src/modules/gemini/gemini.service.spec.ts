@@ -51,7 +51,7 @@ describe('GeminiService', () => {
         responseSchema: { properties: { clasificacion: { enum: string[] } } };
       };
     };
-    expect(llamada.model).toBe('gemini-3.8-flash');
+    expect(llamada.model).toBe('gemini-3.1-flash-lite');
     expect(llamada.config.responseMimeType).toBe('application/json');
     expect(llamada.config.responseSchema.properties.clasificacion.enum).toEqual(
       ['INUNDADO', 'PARCIAL', 'NO_INUNDADO'],

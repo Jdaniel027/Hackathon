@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { OnApplicationBootstrap } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { APP_ERRORS } from '../../common/exception/app-exception.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -9,6 +10,8 @@ import { calcularEstado, umbralesPara } from '../zonas/constants/umbrales.js';
 import { M_POR_GRADO } from '../zonas/utils/geo.util.js';
 import type { EstadoZonaApi } from '../zonas/zonas.types.js';
 import type { Prisma } from '../../generated/prisma/client.js';
+import { celdasBajasConectadas, mallaReporte } from './area-estimada.util.js';
+import type { PuntoZona } from '../open-meteo/open-meteo.service.js';
 
 export const NOMBRES_CRON = [
   'actualizarClima',
@@ -68,14 +71,30 @@ type ReporteConZona = Prisma.ReporteGetPayload<{
 }>;
 
 @Injectable()
-export class CronsService {
+export class CronsService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CronsService.name);
+  private readonly enCurso = new Map<NombreCron, Promise<ResultadoCron>>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly openMeteo: OpenMeteoService,
     private readonly conagua: ConaguaService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    // Las suites HTTP usan una BD compartida: nunca escribir al iniciar en NODE_ENV=test.
+    if (process.env.NODE_ENV === 'test') return;
+    void this.actualizarAlIniciar();
+  }
+
+  private async actualizarAlIniciar(): Promise<void> {
+    // No bloquea el arranque HTTP; reevaluar después del primer clima evita usar datos viejos.
+    await Promise.all([
+      this.ejecutarSeguro('actualizarClima'),
+      this.ejecutarSeguro('expirarRiesgos'),
+    ]);
+    await this.ejecutarSeguro('reevaluarReportes');
+  }
 
   // Cada 15 minutos: Open-Meteo → Zona + LecturaClima.
   @Cron('0 */15 * * * *')
@@ -106,6 +125,19 @@ export class CronsService {
     if (!this.esNombreValido(nombre)) {
       throw APP_ERRORS.CRON_DESCONOCIDO(nombre);
     }
+    const actual = this.enCurso.get(nombre);
+    if (actual) return actual;
+
+    const trabajo = this.ejecutarTrabajo(nombre);
+    this.enCurso.set(nombre, trabajo);
+    try {
+      return await trabajo;
+    } finally {
+      this.enCurso.delete(nombre);
+    }
+  }
+
+  private ejecutarTrabajo(nombre: NombreCron): Promise<ResultadoCron> {
     switch (nombre) {
       case 'actualizarClima':
         return this.jobActualizarClima();
@@ -334,8 +366,8 @@ export class CronsService {
           data: { tipo: 'CORROBORADO' },
         });
         const accion = await this.crearORenovarRiesgo(reporte);
-        if (accion === 'creado') riesgosCreados += 1;
-        else riesgosRenovados += 1;
+        riesgosCreados += accion.creados;
+        riesgosRenovados += accion.renovados;
         corroborados += 1;
       } else if (clasificacion === 'INUNDADO' && !superaUmbral) {
         await this.prisma.reporte.update({
@@ -383,10 +415,23 @@ export class CronsService {
   // Crea o renueva un ZonaRiesgo de inundación por evidencia (IDEA.md §6).
   private async crearORenovarRiesgo(
     reporte: ReporteConZona,
-  ): Promise<'creado' | 'renovado'> {
+  ): Promise<{ creados: number; renovados: number }> {
     const lat = reporte.userLat ?? reporte.zona.latCentro;
     const lng = reporte.userLng ?? reporte.zona.lngCentro;
     const venceEn = new Date(Date.now() + PROLONGACION_RIESGO_MS);
+    let puntos: PuntoZona[] = [{ latCentro: lat, lngCentro: lng }];
+    try {
+      const celdas = mallaReporte(reporte.zona, lat, lng);
+      const elevaciones = await this.openMeteo.getElevaciones(
+        celdas.map((celda) => celda.punto),
+      );
+      puntos = celdasBajasConectadas(celdas, elevaciones);
+    } catch {
+      // Fallo del DEM: conserva la corroboración y el riesgo puntual existente.
+      this.logger.warn(
+        `Elevación no disponible para reporte ${reporte.id}; se conserva riesgo puntual.`,
+      );
+    }
 
     const activos = await this.prisma.zonaRiesgo.findMany({
       where: {
@@ -397,31 +442,44 @@ export class CronsService {
       },
     });
 
-    const existente = activos.find(
-      (riesgo) =>
-        this.distanciaM(lat, lng, riesgo.lat, riesgo.lng) <= riesgo.radioM,
-    );
-
-    if (existente) {
-      await this.prisma.zonaRiesgo.update({
-        where: { id: existente.id },
-        data: { venceEn },
+    let creados = 0;
+    let renovados = 0;
+    const renovadosIds = new Set<number>();
+    for (const punto of puntos) {
+      const existente = activos.find(
+        (riesgo) =>
+          this.distanciaM(
+            punto.latCentro,
+            punto.lngCentro,
+            riesgo.lat,
+            riesgo.lng,
+          ) <= riesgo.radioM,
+      );
+      if (existente) {
+        if (!renovadosIds.has(existente.id)) {
+          await this.prisma.zonaRiesgo.update({
+            where: { id: existente.id },
+            data: { venceEn },
+          });
+          renovadosIds.add(existente.id);
+          renovados += 1;
+        }
+        continue;
+      }
+      await this.prisma.zonaRiesgo.create({
+        data: {
+          municipioId: reporte.zona.municipioId,
+          lat: punto.latCentro,
+          lng: punto.lngCentro,
+          radioM: RADIO_RIESGO_INUNDACION_M,
+          motivo: 'INUNDACION',
+          origen: 'CLIMA',
+          venceEn,
+        },
       });
-      return 'renovado';
+      creados += 1;
     }
-
-    await this.prisma.zonaRiesgo.create({
-      data: {
-        municipioId: reporte.zona.municipioId,
-        lat,
-        lng,
-        radioM: RADIO_RIESGO_INUNDACION_M,
-        motivo: 'INUNDACION',
-        origen: 'CLIMA',
-        venceEn,
-      },
-    });
-    return 'creado';
+    return { creados, renovados };
   }
 
   // ─── expirarRiesgos ───────────────────────────────────────────────────────

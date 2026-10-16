@@ -91,11 +91,12 @@ hackaton-backend/
 
 ## 5. Notas y decisiones abiertas
 
-- **Alcance geográfico:** la demo es **Mazatlán**. `IDEA.md` menciona Ahome/Los Mochis; el
-  alcance acordado es multi-municipio. El seed usa Mazatlán.
+- **Alcance geográfico actual (D-007):** la demo es **Guasave**. `IDEA.md` menciona
+  Ahome/Los Mochis y este documento conserva referencias históricas a Mazatlán;
+  el alcance sigue siendo multi-municipio. El seed ahora usa Guasave.
 - **Umbrales de lluvia:** parámetro por municipio, no constante hardcodeada.
-- **IDs SMN de Mazatlán:** `idEstadoSmn=25` / `idMunSmn=12` son provisionales en el seed;
-  no ejecutarlo de nuevo sobre Supabase hasta validarlos con una respuesta real de Conagua.
+- **IDs SMN de Guasave:** `idEstadoSmn=25` / `idMunSmn=11`, validados contra
+  Conagua `method=3`. No confundir con el ID anterior de Mazatlán (25/12).
 - **Historial de zona:** `GET /zonas/:id` solicita las últimas 25 lecturas, ordenadas
   por `creadoEn` descendente. Proponer este detalle en `API_MANUAL.md` al equipo.
 - **Capa de caché:** no implementes Redis. Deja el acceso a BD detrás de un servicio

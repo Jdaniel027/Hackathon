@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'vitest';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { OpenMeteoService } from '../open-meteo/open-meteo.service.js';
 import type { ConaguaService } from '../conagua/conagua.service.js';
@@ -22,6 +30,7 @@ type Mocks = {
   riesgoUpdate: Mock;
   riesgoUpdateMany: Mock;
   getLluviaZonas: Mock;
+  getElevaciones: Mock;
   getPronosticosPorHora: Mock;
 };
 
@@ -98,6 +107,7 @@ describe('CronsService', () => {
       riesgoUpdate: vi.fn().mockResolvedValue({}),
       riesgoUpdateMany: vi.fn().mockResolvedValue({ count: 0 }),
       getLluviaZonas: vi.fn().mockResolvedValue([]),
+      getElevaciones: vi.fn().mockRejectedValue(new Error('DEM no disponible')),
       getPronosticosPorHora: vi.fn().mockResolvedValue(new Map()),
     };
 
@@ -116,11 +126,71 @@ describe('CronsService', () => {
 
     const openMeteo = {
       getLluviaZonas: m.getLluviaZonas,
+      getElevaciones: m.getElevaciones,
     } as unknown as OpenMeteoService;
 
     crons = new CronsService(prisma, openMeteo, {
       getPronosticosPorHora: m.getPronosticosPorHora,
     } as unknown as ConaguaService);
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  describe('arranque', () => {
+    it('actualiza clima y expira riesgos sin esperar para arrancar; reevalúa al terminar clima', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      let terminarClima!: (zonas: unknown[]) => void;
+      m.zonaFindMany.mockReturnValue(
+        new Promise((resolve) => {
+          terminarClima = resolve;
+        }),
+      );
+
+      crons.onApplicationBootstrap();
+
+      expect(m.zonaFindMany).toHaveBeenCalledTimes(1);
+      expect(m.riesgoUpdateMany).toHaveBeenCalledTimes(1);
+      expect(m.reporteFindMany).not.toHaveBeenCalled();
+
+      terminarClima([]);
+      await vi.waitFor(() =>
+        expect(m.reporteFindMany).toHaveBeenCalledTimes(1),
+      );
+    });
+
+    it('no escribe automáticamente cuando NODE_ENV=test', () => {
+      vi.stubEnv('NODE_ENV', 'test');
+      crons.onApplicationBootstrap();
+      expect(m.zonaFindMany).not.toHaveBeenCalled();
+      expect(m.riesgoUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('comparte un cron en curso entre el arranque y el disparo periódico', async () => {
+      let terminarClima!: (zonas: unknown[]) => void;
+      m.zonaFindMany.mockReturnValue(
+        new Promise((resolve) => {
+          terminarClima = resolve;
+        }),
+      );
+      const manual = crons.ejecutar('actualizarClima');
+      const periodico = crons.actualizarClima();
+      expect(m.zonaFindMany).toHaveBeenCalledTimes(1);
+      terminarClima([]);
+      await Promise.all([manual, periodico]);
+      expect(m.zonaFindMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('permite reintentar el cron después de un error', async () => {
+      m.zonaFindMany.mockRejectedValueOnce(new Error('base inaccesible'));
+      await expect(crons.ejecutar('actualizarClima')).rejects.toThrow(
+        'base inaccesible',
+      );
+      m.zonaFindMany.mockResolvedValue([]);
+      await expect(crons.ejecutar('actualizarClima')).resolves.toMatchObject({
+        ejecutado: true,
+      });
+      expect(m.zonaFindMany).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('ejecutar (disparo manual desde /admin/cron/:nombre)', () => {
@@ -448,6 +518,29 @@ describe('CronsService', () => {
       await crons.ejecutar('reevaluarReportes');
 
       expect(datosUpdate(m.reporteUpdate).tipo).toBe('CORROBORADO');
+    });
+
+    it('estima celdas bajas para un reporte corroborado y persiste varios círculos', async () => {
+      m.reporteFindMany.mockResolvedValue([
+        reporte(
+          {},
+          {
+            ladoM: 9000,
+          },
+        ),
+      ]);
+      m.getElevaciones.mockImplementation(async (puntos: unknown[]) =>
+        puntos.map(() => 10),
+      );
+      const resultado = await crons.ejecutar('reevaluarReportes');
+
+      expect(m.getElevaciones).toHaveBeenCalledOnce();
+      expect(m.getElevaciones.mock.calls[0][0]).toHaveLength(25);
+      expect(m.riesgoCreate).toHaveBeenCalledTimes(25);
+      expect(resultado.detalle).toMatchObject({
+        corroborados: 1,
+        riesgosCreados: 25,
+      });
     });
 
     it('renueva el riesgo activo cercano en vez de duplicarlo', async () => {
