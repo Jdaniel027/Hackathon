@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { UbicacionService } from '../ubicacion/ubicacion.service.js';
 import { APP_ERRORS } from '../../common/exception/app-exception.js';
@@ -15,6 +15,7 @@ import type { EstadoZona, FuenteClima } from '../../generated/prisma/enums.js';
 
 const LADO_DEFECTO_M = 9000;
 const LECTURAS_POR_DEFECTO = 25;
+const MAX_ZONAS_POR_GENERACION = 500;
 
 @Injectable()
 export class ZonasService {
@@ -134,14 +135,33 @@ export class ZonasService {
     ne: Coordenada,
     ladoM: number = LADO_DEFECTO_M,
   ): Promise<{ creadas: number }> {
-    const municipio =
-      await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
     const [swLat, swLng] = sw;
     const [neLat, neLng] = ne;
+    if (
+      swLat >= neLat ||
+      swLng >= neLng ||
+      !Number.isFinite(ladoM) ||
+      ladoM <= 0
+    ) {
+      throw new BadRequestException(
+        'Los límites sw/ne o el tamaño de celda no son válidos.',
+      );
+    }
 
     const centroLat = (swLat + neLat) / 2;
     const dLat = ladoM / M_POR_GRADO;
     const dLng = ladoM / (M_POR_GRADO * Math.cos((centroLat * Math.PI) / 180));
+    if (
+      Math.ceil((neLat - swLat) / dLat) * Math.ceil((neLng - swLng) / dLng) >
+      MAX_ZONAS_POR_GENERACION
+    ) {
+      throw new BadRequestException(
+        'El área supera el máximo de 500 zonas por operación.',
+      );
+    }
+
+    const municipio =
+      await this.ubicacion.buscarMunicipioPorSlug(municipioSlug);
 
     const centros: { latCentro: number; lngCentro: number }[] = [];
     for (let lat = swLat + dLat / 2; lat <= neLat; lat += dLat) {

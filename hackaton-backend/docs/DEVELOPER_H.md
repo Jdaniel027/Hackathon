@@ -53,7 +53,7 @@ hackaton-backend/
 - [x] `env.schema.ts` con zod; no arranca sin `DATABASE_URL`, `GEMINI_API_KEY`, `ADMIN_API_KEY`.
 - [x] `PrismaModule` global + `PrismaService`.
 - [x] `prisma/schema.prisma` con los modelos de `IDEA.md` §2.
-- [ ] `seed.ts`: México → Sinaloa → **Mazatlán** (con `idEstadoSmn` / `idMunSmn`). *(ver §5: IDs aún provisionales)*
+- [ ] `seed.ts`: México → Sinaloa → **Mazatlán** (con `idEstadoSmn` / `idMunSmn`). El archivo existe; los IDs son provisionales y en Supabase siguen `null`. Validarlos con Conagua antes de ejecutar de nuevo el seed (ver §5).
 
 ### Fase 2 — Cimiento común
 - [x] `configurar-app.ts`: prefijo `/api/v1`, CORS con orígenes de env, `helmet`, pipe, filtro, Swagger en `/api/v1/docs`.
@@ -79,11 +79,13 @@ hackaton-backend/
 - [x] `GET /health`.
 
 ### Fase 5 — Admin
-- [ ] `POST /admin/simular-lluvia`
-- [ ] `POST /admin/cron/:nombre` (whitelist de nombres; ejecuta la tarea de V)
-- [ ] `POST /admin/zonas/generar` `{ municipioSlug, sw, ne }`
-- [ ] `POST /admin/riesgo-altura/:zonaId`
-- [ ] `POST /admin/ciclon` (la lógica de ciclones es de V; tú expones la ruta)
+- [x] `POST /admin/simular-lluvia` (validación y escritura transaccional; pruebas con mocks).
+- [x] `POST /admin/cron/:nombre` (API key y whitelist; la ejecución real es pendiente de V).
+- [x] `POST /admin/zonas/generar` `{ municipioSlug, sw, ne }` (límites ordenados, máximo 500 celdas).
+- [x] `POST /admin/riesgo-altura/:zonaId` (comprueba elevaciones y evita duplicados secuenciales).
+- [x] `POST /admin/ciclon` (expone la ruta; responde 501 sin escribir hasta integración con V).
+
+**Pendientes de integración y pruebas reales:** ver [`PENDIENTES.md`](PENDIENTES.md).
 
 ---
 
@@ -108,21 +110,24 @@ hackaton-backend/
 | — | Eres el bloque inicial | — |
 | `DEVELOPER_V` | — | V espera: schema Prisma migrado, `PrismaModule` global, decorator `@RateLimitEspecifico`, y un servicio de zonas expuesto para que el cron escriba `LecturaClima`/`Zona`. |
 
-Para `/admin/cron/:nombre` y `/admin/ciclon`: define la firma del servicio que V implementará
-(p. ej. `CronRunner.ejecutar(nombre)` y `CiclonesService.crearDesdeAdmin(dto)`) y publícala en §6
-para que V la cumpla. No implementes la lógica de V.
+`/admin/cron/:nombre` delega a `CronsService.ejecutar(nombre)`; V debe completar los trabajos.
+`/admin/ciclon` permanece en 501 hasta acordar con V la firma del servicio que recibirá
+`RegistrarCiclonDto` y devolverá `RegistrarCiclonResultado`. No implementar la lógica de V en H.
+Seguimiento de ambas dependencias en [`PENDIENTES.md`](PENDIENTES.md).
 
 ---
 
 ## 7. Definición de terminado
 
-- [ ] `pnpm lint` sin errores.
-- [ ] `npx tsc --noEmit` sin errores.
-- [ ] `pnpm prisma validate` y migración aplicable.
-- [ ] `pnpm build` correcto.
-- [ ] Swagger refleja los endpoints reales.
-- [ ] Sin `any` sin justificación, sin secretos en el repo.
+- [x] `pnpm lint` sin errores (queda advertencia por `ReporteApi` sin usar en módulo de V).
+- [x] `pnpm typecheck` (`tsc --noEmit`) sin errores.
+- [x] `pnpm prisma:validate` y `prisma migrate status`: esquema válido, migración al día.
+- [x] `pnpm build` correcto.
+- [x] Swagger disponible en `/api/v1/docs`; rutas registradas verificadas en la prueba HTTP.
+- [ ] Sin `any` sin justificación, sin secretos en el repo (sin `any` de tipo en `src/`; `.env` no versionado; falta auditoría completa de secretos).
 - [ ] Contracts en `API_MANUAL.md` coinciden con lo implementado.
+
+Verificado el 16/10/2026: `pnpm test` (47/47); la prueba HTTP cubrió rutas públicas y admin. Los límites reales de rate limiting no se probaron: la corrida HTTP anterior los desactivó temporalmente. El contrato compartido aún requiere actualizar las 25 lecturas y el 501 de ciclón.
 
 ---
 

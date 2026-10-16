@@ -64,9 +64,13 @@ export class AppGlobalFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request & { requestId?: string }>();
 
-    const resuelto = this.resolver(exception, response);
+    const resuelto = this.resolver(exception, response, request.originalUrl);
 
-    if (resuelto.statusCode >= 500) {
+    if (resuelto.code === 'NO_IMPLEMENTADO') {
+      this.logger.warn(
+        `[${resuelto.code}] ${request.method} ${request.originalUrl} → ${resuelto.statusCode}`,
+      );
+    } else if (resuelto.statusCode >= 500) {
       this.logger.error(
         `[${resuelto.code}] ${request.method} ${request.originalUrl} → ${resuelto.statusCode}`,
         exception instanceof Error ? exception.stack : String(exception),
@@ -84,7 +88,7 @@ export class AppGlobalFilter implements ExceptionFilter {
     });
   }
 
-  private resolver(exception: unknown, response: Response): ErrorResuelto {
+  private resolver(exception: unknown, response: Response, path: string): ErrorResuelto {
     // 1) Prisma (duck-typing para no acoplar common a los tipos generados)
     if (this.esErrorPrisma(exception)) {
       const codice = String(exception.code);
@@ -109,11 +113,15 @@ export class AppGlobalFilter implements ExceptionFilter {
         return this.resolverRateLimit(response);
       }
 
-      if (status === HttpStatus.NOT_FOUND && typeof payload === 'string') {
+      if (
+        status === HttpStatus.NOT_FOUND &&
+        exception.message.startsWith('Cannot ') &&
+        (typeof payload !== 'object' || payload === null || !('code' in payload))
+      ) {
         return {
           statusCode: HttpStatus.NOT_FOUND,
           code: 'RUTA_NO_ENCONTRADA',
-          message: `La ruta ${payload} no existe.`,
+          message: `La ruta ${path} no existe.`,
           details: null,
         };
       }

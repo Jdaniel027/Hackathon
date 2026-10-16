@@ -1,8 +1,9 @@
-import { Body, Controller, Param, ParseIntPipe, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RATE_LIMITS } from '../../common/constants/rate-limit.constants.js';
 import { Admin } from '../../common/decorators/admin.decorator.js';
 import { RateLimitEspecifico } from '../../common/decorators/rate-limit.decorator.js';
+import { parseZonaIdPipe } from '../../common/pipes/parse-zona-id.pipe.js';
 import { CronsService } from '../crons/crons.service.js';
 import type { ResultadoCron } from '../crons/crons.service.js';
 import type { ZonaMapa } from '../zonas/zonas.types.js';
@@ -55,13 +56,15 @@ export class AdminController {
     summary: 'Marca los puntos bajos de una zona como riesgo ALTURA',
   })
   riesgoAltura(
-    @Param('zonaId', ParseIntPipe) zonaId: number,
+    @Param('zonaId', parseZonaIdPipe('zonaId')) zonaId: number,
   ): Promise<RiesgoAlturaResultado> {
     return this.adminService.riesgoPorAltura(zonaId);
   }
 
   @Post('ciclon')
-  @ApiOperation({ summary: 'Registra un aviso de ciclón sobre un punto' })
+  @ApiOperation({
+    summary: 'Registro de ciclón pendiente de integración (501)',
+  })
   registrarCiclon(
     @Body() dto: RegistrarCiclonDto,
   ): Promise<RegistrarCiclonResultado> {

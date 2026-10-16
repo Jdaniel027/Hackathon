@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -82,5 +83,43 @@ describe('rutas públicas del mapa', () => {
       .get('/api/v1/zonas/999')
       .expect(404);
     expect(respuesta.body.code).toBe('ZONA_NO_ENCONTRADA');
+  });
+
+  it('devuelve un error de ruta en español para una URL inexistente', async () => {
+    const respuesta = await request(app.getHttpServer())
+      .get('/api/v1/ruta-inexistente')
+      .expect(404);
+    expect(respuesta.body).toMatchObject({
+      code: 'RUTA_NO_ENCONTRADA',
+      message: 'La ruta /api/v1/ruta-inexistente no existe.',
+    });
+  });
+
+  it('devuelve un error de validación en español para un id inválido', async () => {
+    const respuesta = await request(app.getHttpServer())
+      .get('/api/v1/zonas/abc')
+      .expect(400);
+    expect(respuesta.body).toMatchObject({
+      code: 'INVALID_ZONA_ID',
+      message: 'El id de la zona debe ser un entero.',
+      details: { field: 'id' },
+    });
+  });
+
+  it('registra 501 conocido como advertencia, no como error', async () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      getZona.mockRejectedValue(APP_ERRORS.NO_IMPLEMENTADO('Pendiente de integración.'));
+      const respuesta = await request(app.getHttpServer())
+        .get('/api/v1/zonas/1')
+        .expect(501);
+      expect(respuesta.body.code).toBe('NO_IMPLEMENTADO');
+      expect(warn).toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 });
