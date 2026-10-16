@@ -25,7 +25,10 @@ const ZONA = {
 };
 
 function fotoFake(mimetype = 'image/jpeg'): Express.Multer.File {
-  return { mimetype, buffer: Buffer.from('foto-de-prueba') } as unknown as Express.Multer.File;
+  return {
+    mimetype,
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+  } as unknown as Express.Multer.File;
 }
 
 function dto(lat = 23.2494, lng = -106.4111): CrearReporteDto {
@@ -55,8 +58,9 @@ describe('ReportesService', () => {
     reporteFindMany = vi.fn().mockResolvedValue([]);
     parse.mockReset().mockResolvedValue({ DateTimeOriginal: new Date() });
 
-    const prisma = { reporte: { create: reporteCreate, findMany: reporteFindMany } } as unknown as
-      PrismaService;
+    const prisma = {
+      reporte: { create: reporteCreate, findMany: reporteFindMany },
+    } as unknown as PrismaService;
 
     reportes = new ReportesService(
       prisma,
@@ -75,11 +79,34 @@ describe('ReportesService', () => {
     });
 
     it('rechaza 415 si el MIME no está permitido', async () => {
-      await expect(reportes.crear(fotoFake('application/pdf'), dto())).rejects.toMatchObject({
+      await expect(
+        reportes.crear(fotoFake('application/pdf'), dto()),
+      ).rejects.toMatchObject({
         status: 415,
         response: { code: 'REPORT_ARCHIVO_INVALIDO' },
       });
       expect(buscarZonaPorPunto).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un MIME declarado que no coincide con el contenido', async () => {
+      const foto = fotoFake();
+      foto.buffer = Buffer.from('%PDF-1.4');
+      await expect(reportes.crear(foto, dto())).rejects.toMatchObject({
+        status: 415,
+      });
+      expect(clasificarFoto).not.toHaveBeenCalled();
+    });
+
+    it('rechaza una foto mayor a 10 MB antes de llamar a Gemini', async () => {
+      const foto = fotoFake();
+      foto.buffer = Buffer.concat([
+        foto.buffer,
+        Buffer.alloc(10 * 1024 * 1024),
+      ]);
+      await expect(reportes.crear(foto, dto())).rejects.toMatchObject({
+        status: 413,
+      });
+      expect(clasificarFoto).not.toHaveBeenCalled();
     });
 
     it('rechaza 400 si el punto no cae en ninguna zona', async () => {
@@ -107,6 +134,15 @@ describe('ReportesService', () => {
       expect(reporteCreate).not.toHaveBeenCalled();
     });
 
+    it('rechaza fechas EXIF más de 30 minutos en el futuro', async () => {
+      parse.mockResolvedValueOnce({
+        DateTimeOriginal: new Date(Date.now() + 40 * 60 * 1000),
+      });
+      await expect(reportes.crear(fotoFake(), dto())).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+
     it('acepta una foto con EXIF dentro de la ventana de 30 minutos', async () => {
       const reciente = new Date(Date.now() - 10 * 60 * 1000);
       parse.mockResolvedValueOnce({ DateTimeOriginal: reciente });
@@ -128,9 +164,15 @@ describe('ReportesService', () => {
 
     it('sin EXIF no inventa fecha y valida contra la hora del servidor', async () => {
       parse.mockResolvedValueOnce(undefined);
-      reporteCreate.mockResolvedValue({ id: 2, tipo: 'PENDIENTE', clasificacion: 'NORMAL' });
+      reporteCreate.mockResolvedValue({
+        id: 2,
+        tipo: 'PENDIENTE',
+        clasificacion: 'NORMAL',
+      });
 
-      await expect(reportes.crear(fotoFake(), dto())).resolves.toMatchObject({ id: 2 });
+      await expect(reportes.crear(fotoFake(), dto())).resolves.toMatchObject({
+        id: 2,
+      });
 
       // No se fabrica una fecha: se guarda como desconocida. La validación de
       // antigüedad usa "ahora" como referencia, así que una foto recién subida
@@ -140,14 +182,20 @@ describe('ReportesService', () => {
 
     it('tolera una lectura EXIF corrupta sin dejar de reportar', async () => {
       parse.mockRejectedValueOnce(new Error('exif ilegible'));
-      reporteCreate.mockResolvedValue({ id: 3, tipo: 'PENDIENTE', clasificacion: 'NORMAL' });
+      reporteCreate.mockResolvedValue({
+        id: 3,
+        tipo: 'PENDIENTE',
+        clasificacion: 'NORMAL',
+      });
 
-      await expect(reportes.crear(fotoFake(), dto())).resolves.toMatchObject({ id: 3 });
+      await expect(reportes.crear(fotoFake(), dto())).resolves.toMatchObject({
+        id: 3,
+      });
       expect(clasificarFoto).toHaveBeenCalled();
     });
 
     it('persiste en PENDIENTE y traduce la clasificación al enum de la BD', async () => {
-      clasificarFoto.mockResolvedValueOnce('PRECAUCION');
+      clasificarFoto.mockResolvedValueOnce('PARCIAL');
       reporteCreate.mockResolvedValue({
         id: 4,
         tipo: 'PENDIENTE',
@@ -158,8 +206,11 @@ describe('ReportesService', () => {
       const respuesta = await reportes.crear(fotoFake(), dto());
 
       expect(buscarZonaPorPunto).toHaveBeenCalledWith(23.2494, -106.4111);
-      expect(clasificarFoto).toHaveBeenCalledWith(expect.any(Buffer), 'image/jpeg');
-      // La BD guarda el valor de ClasificacionIA; la API expone el de la foto.
+      expect(clasificarFoto).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'image/jpeg',
+      );
+      // La BD y la API comparten el contrato de clasificación.
       expect(datosCreate(reporteCreate)).toMatchObject({
         zonaId: 7,
         fuente: 'CIUDADANO',
@@ -169,7 +220,10 @@ describe('ReportesService', () => {
         userLng: -106.4111,
       });
       // Un solo reporte jamás sube a INUNDADO: siempre nace PENDIENTE.
-      expect(respuesta).toMatchObject({ tipo: 'PENDIENTE', clasificacion: 'PRECAUCION' });
+      expect(respuesta).toMatchObject({
+        tipo: 'PENDIENTE',
+        clasificacion: 'PARCIAL',
+      });
     });
   });
 
@@ -228,24 +282,27 @@ describe('ReportesService', () => {
     it('sin filtros no agrega condiciones vacías', async () => {
       await reportes.listar({} as never);
 
-      const where = consultaFindMany(reporteFindMany).where as Record<string, unknown>;
+      const where = consultaFindMany(reporteFindMany).where as Record<
+        string,
+        unknown
+      >;
       expect(where.zonaId).toBeUndefined();
       expect(where.creadoEn).toBeUndefined();
     });
 
-    it('traduce la clasificación de la BD a la de la API y normaliza fechas', async () => {
+    it('mantiene la clasificación de la BD y normaliza fechas', async () => {
       const respuesta = await reportes.listar({} as never);
 
       expect(respuesta.reportes[0]).toMatchObject({
-        clasificacion: 'PRECAUCION',
+        clasificacion: 'PARCIAL',
         fechaFoto: '2026-10-16T08:00:00.000Z',
         creadoEn: '2026-10-16T08:05:00.000Z',
       });
       expect(respuesta.reportes[1]).toMatchObject({
         clasificacion: null,
         fechaFoto: null,
-        userLat: null,
-        userLng: null,
+        lat: null,
+        lng: null,
       });
     });
   });

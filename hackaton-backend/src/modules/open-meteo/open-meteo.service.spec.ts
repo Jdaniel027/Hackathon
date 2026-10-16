@@ -6,7 +6,11 @@ const CONTEXTO = { latCentro: 23.2494, lngCentro: -106.4111 };
 const fetchMock = vi.fn();
 
 function respuestaOk(json: unknown): void {
-  fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => json });
+  fetchMock.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => json,
+  });
 }
 
 function respuestaFalla(status: number): void {
@@ -39,7 +43,11 @@ describe('OpenMeteoService', () => {
       // 24 horas: 23 con 0 mm y la última (reciente) con 5 mm.
       const precipitacion = [...Array(23).fill(0), 5];
       respuestaOk([
-        { latitude: 23.25, longitude: -106.41, hourly: { precipitation: precipitacion } },
+        {
+          latitude: 23.25,
+          longitude: -106.41,
+          hourly: { precipitation: precipitacion },
+        },
       ]);
 
       const resultado = await servicio.getLluviaZonas([CONTEXTO]);
@@ -81,12 +89,11 @@ describe('OpenMeteoService', () => {
       expect(resultado.map((z) => z.mm24h)).toEqual([30, 3]);
     });
 
-    it('no falla si un punto no trae datos y devuelve lluvia cero', async () => {
+    it('rechaza un punto sin lluvia en lugar de inventar cero', async () => {
       respuestaOk([{ latitude: 23.25, longitude: -106.41 }]);
-
-      const [lluvia] = await servicio.getLluviaZonas([CONTEXTO]);
-
-      expect(lluvia).toMatchObject({ mm1h: 0, mm24h: 0, latModelo: 23.25 });
+      await expect(servicio.getLluviaZonas([CONTEXTO])).rejects.toMatchObject({
+        status: 503,
+      });
     });
 
     it('usa el modelo y la ventana del proyecto', async () => {
@@ -99,6 +106,14 @@ describe('OpenMeteoService', () => {
       expect(url.searchParams.get('hourly')).toBe('precipitation');
       expect(url.searchParams.get('past_hours')).toBe('24');
       expect(url.searchParams.get('forecast_hours')).toBe('1');
+    });
+
+    it('suma solo las 24 horas más recientes', async () => {
+      respuestaOk([
+        { hourly: { precipitation: [100, ...Array(23).fill(0), 3] } },
+      ]);
+      const [lluvia] = await servicio.getLluviaZonas([CONTEXTO]);
+      expect(lluvia?.mm24h).toBe(3);
     });
 
     it('sin reintentos ante una respuesta 4xx', async () => {
@@ -138,10 +153,11 @@ describe('OpenMeteoService', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('devuelve las elevaciones y normaliza nulos a cero', async () => {
-      respuestaOk({ elevation: [12, null, 30] });
-
-      await expect(servicio.getElevaciones([CONTEXTO])).resolves.toEqual([12, 0, 30]);
+    it('rechaza elevaciones incompletas en lugar de inventar cero', async () => {
+      respuestaOk({ elevation: [null] });
+      await expect(servicio.getElevaciones([CONTEXTO])).rejects.toMatchObject({
+        status: 503,
+      });
     });
 
     it('rechaza con más de 100 coordenadas sin consultar', async () => {

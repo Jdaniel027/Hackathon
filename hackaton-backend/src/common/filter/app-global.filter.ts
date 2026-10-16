@@ -88,7 +88,11 @@ export class AppGlobalFilter implements ExceptionFilter {
     });
   }
 
-  private resolver(exception: unknown, response: Response, path: string): ErrorResuelto {
+  private resolver(
+    exception: unknown,
+    response: Response,
+    path: string,
+  ): ErrorResuelto {
     // 1) Prisma (duck-typing para no acoplar common a los tipos generados)
     if (this.esErrorPrisma(exception)) {
       const codice = String(exception.code);
@@ -114,9 +118,20 @@ export class AppGlobalFilter implements ExceptionFilter {
       }
 
       if (
+        status === HttpStatus.PAYLOAD_TOO_LARGE &&
+        path.startsWith('/api/v1/reportes')
+      ) {
+        const fotoGrande =
+          APP_ERRORS.REPORT_ARCHIVO_MUY_GRANDE().getResponse() as ErrorResuelto;
+        return { ...fotoGrande, statusCode: status };
+      }
+
+      if (
         status === HttpStatus.NOT_FOUND &&
         exception.message.startsWith('Cannot ') &&
-        (typeof payload !== 'object' || payload === null || !('code' in payload))
+        (typeof payload !== 'object' ||
+          payload === null ||
+          !('code' in payload))
       ) {
         return {
           statusCode: HttpStatus.NOT_FOUND,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import type { OpenMeteoService } from '../open-meteo/open-meteo.service.js';
+import type { ConaguaService } from '../conagua/conagua.service.js';
 import { CronsService, NOMBRES_CRON } from './crons.service.js';
 
 // Mazatlán no tiene umbrales propios → se usan los por defecto:
@@ -21,9 +22,12 @@ type Mocks = {
   riesgoUpdate: Mock;
   riesgoUpdateMany: Mock;
   getLluviaZonas: Mock;
+  getPronosticosPorHora: Mock;
 };
 
-function zona(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function zona(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 1,
     municipioId: 1,
@@ -37,7 +41,10 @@ function zona(overrides: Record<string, unknown> = {}): Record<string, unknown> 
   };
 }
 
-function reporte(overrides: Record<string, unknown> = {}, zonaOverrides: Record<string, unknown> = {}): Record<string, unknown> {
+function reporte(
+  overrides: Record<string, unknown> = {},
+  zonaOverrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id: 10,
     zonaId: 1,
@@ -51,7 +58,9 @@ function reporte(overrides: Record<string, unknown> = {}, zonaOverrides: Record<
   };
 }
 
-function lluvia(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function lluvia(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     latCentro: 23.2494,
     lngCentro: -106.4111,
@@ -89,6 +98,7 @@ describe('CronsService', () => {
       riesgoUpdate: vi.fn().mockResolvedValue({}),
       riesgoUpdateMany: vi.fn().mockResolvedValue({ count: 0 }),
       getLluviaZonas: vi.fn().mockResolvedValue([]),
+      getPronosticosPorHora: vi.fn().mockResolvedValue(new Map()),
     };
 
     const prisma = {
@@ -104,9 +114,13 @@ describe('CronsService', () => {
       },
     } as unknown as PrismaService;
 
-    const openMeteo = { getLluviaZonas: m.getLluviaZonas } as unknown as OpenMeteoService;
+    const openMeteo = {
+      getLluviaZonas: m.getLluviaZonas,
+    } as unknown as OpenMeteoService;
 
-    crons = new CronsService(prisma, openMeteo);
+    crons = new CronsService(prisma, openMeteo, {
+      getPronosticosPorHora: m.getPronosticosPorHora,
+    } as unknown as ConaguaService);
   });
 
   describe('ejecutar (disparo manual desde /admin/cron/:nombre)', () => {
@@ -154,7 +168,11 @@ describe('CronsService', () => {
         { latCentro: 23.2494, lngCentro: -106.4111 },
       ]);
       expect(m.zonaFindMany).toHaveBeenCalledWith({
-        include: { municipio: { select: { slug: true } } },
+        include: {
+          municipio: {
+            select: { slug: true, idEstadoSmn: true, idMunSmn: true },
+          },
+        },
         orderBy: { id: 'asc' },
       });
       expect(m.transaccion).toHaveBeenCalledTimes(1);
@@ -181,15 +199,20 @@ describe('CronsService', () => {
         zona({ id: i + 1, latCentro: 23 + i / 1000, estado: 'SIN_DATOS' }),
       );
       m.zonaFindMany.mockResolvedValue(zonas);
-      m.getLluviaZonas.mockResolvedValue(Array.from({ length: 100 }, () => lluvia()));
+      m.getLluviaZonas.mockResolvedValue(
+        Array.from({ length: 100 }, () => lluvia()),
+      );
 
       const resultado = await crons.ejecutar('actualizarClima');
 
       expect(m.getLluviaZonas).toHaveBeenCalledTimes(3);
-      expect(m.getLluviaZonas.mock.calls.map((c) => (c[0] as unknown[]).length)).toEqual([
-        100, 100, 50,
-      ]);
-      expect(resultado.detalle).toMatchObject({ zonas: 250, actualizadas: 250 });
+      expect(
+        m.getLluviaZonas.mock.calls.map((c) => (c[0] as unknown[]).length),
+      ).toEqual([100, 100, 50]);
+      expect(resultado.detalle).toMatchObject({
+        zonas: 250,
+        actualizadas: 250,
+      });
     });
 
     it('devuelve ejecutado:false cuando ningún lote pudo leerse', async () => {
@@ -253,7 +276,7 @@ describe('CronsService', () => {
 
       expect(datosUpdate(m.zonaUpdate).estado).toBe('INUNDADO');
       expect(m.lecturaFindFirst).toHaveBeenCalledWith({
-        where: { zonaId: 1 },
+        where: { zonaId: 1, fuente: 'OPEN_METEO' },
         orderBy: { creadoEn: 'desc' },
       });
     });
@@ -284,15 +307,95 @@ describe('CronsService', () => {
 
       const resultado = await crons.ejecutar('actualizarClima');
 
-      // Fase 4 pendiente: aún no hay lecturas de apoyo, pero se deja el hueco.
-      expect(resultado.detalle?.conagua).toEqual({ municipios: 0, lecturas: 0 });
+      // Los mocks no proporcionan identificadores SMN.
+      expect(resultado.detalle?.conagua).toEqual({
+        municipios: 0,
+        lecturas: 0,
+      });
+    });
+
+    it('descarga Conagua una vez por municipio y guarda lectura de apoyo sin cambiar el estado', async () => {
+      m.zonaFindMany.mockResolvedValue([
+        zona({
+          id: 1,
+          municipio: { slug: 'mazatlan', idEstadoSmn: 25, idMunSmn: 12 },
+        }),
+        zona({
+          id: 2,
+          municipio: { slug: 'mazatlan', idEstadoSmn: 25, idMunSmn: 12 },
+        }),
+      ]);
+      m.getLluviaZonas.mockResolvedValue([lluvia(), lluvia()]);
+      const partes = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Mazatlan',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date());
+      const p = Object.fromEntries(
+        partes.map(({ type, value }) => [type, value]),
+      );
+      const hloc = `${p.year}${p.month}${p.day}T${p.hour}`;
+      m.getPronosticosPorHora.mockResolvedValue(
+        new Map([
+          [
+            '25:12',
+            [
+              { nhor: 0, prec: 1.5, hloc },
+              { nhor: 1, prec: 2.5, hloc },
+            ],
+          ],
+        ]),
+      );
+
+      const resultado = await crons.ejecutar('actualizarClima');
+
+      expect(m.getPronosticosPorHora).toHaveBeenCalledWith([
+        { idEstadoSmn: 25, idMunSmn: 12 },
+      ]);
+      expect(m.lecturaCreate).toHaveBeenCalledTimes(3);
+      expect(m.lecturaCreate.mock.calls[2][0].data).toMatchObject({
+        zonaId: 1,
+        fuente: 'CONAGUA',
+        mm1h: 1.5,
+        mm24h: null,
+      });
+      expect(m.zonaUpdate).toHaveBeenCalledTimes(2);
+      expect(resultado.detalle?.conagua).toEqual({
+        municipios: 1,
+        lecturas: 1,
+      });
+    });
+
+    it('no registra un pronóstico antiguo como si fuera la hora actual', async () => {
+      m.zonaFindMany.mockResolvedValue([
+        zona({
+          municipio: { slug: 'mazatlan', idEstadoSmn: 25, idMunSmn: 12 },
+        }),
+      ]);
+      m.getLluviaZonas.mockResolvedValue([lluvia()]);
+      m.getPronosticosPorHora.mockResolvedValue(
+        new Map([['25:12', [{ nhor: 0, prec: 5, hloc: '20200101T00' }]]]),
+      );
+      const resultado = await crons.ejecutar('actualizarClima');
+      expect(resultado.detalle?.conagua).toEqual({
+        municipios: 1,
+        lecturas: 0,
+      });
+      expect(m.lecturaCreate).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('reevaluarReportes', () => {
     beforeEach(() => {
       m.reporteFindMany.mockResolvedValue([reporte()]);
-      m.lecturaFindFirst.mockResolvedValue({ mm1h: 50, mm24h: 130, creadoEn: new Date() });
+      m.lecturaFindFirst.mockResolvedValue({
+        mm1h: 50,
+        mm24h: 130,
+        creadoEn: new Date(),
+      });
     });
 
     it('solo evalúa PENDIENTE de las últimas 24 horas', async () => {
@@ -337,8 +440,10 @@ describe('CronsService', () => {
       expect(Math.abs(venceEn.getTime() - esperado)).toBeLessThan(5000);
     });
 
-    it('corrobora también una foto de PRECAUCION', async () => {
-      m.reporteFindMany.mockResolvedValue([reporte({ clasificacion: 'PARCIAL' })]);
+    it('corrobora también una foto PARCIAL', async () => {
+      m.reporteFindMany.mockResolvedValue([
+        reporte({ clasificacion: 'PARCIAL' }),
+      ]);
 
       await crons.ejecutar('reevaluarReportes');
 
@@ -354,19 +459,31 @@ describe('CronsService', () => {
 
       expect(m.riesgoCreate).not.toHaveBeenCalled();
       expect(m.riesgoUpdate).toHaveBeenCalledTimes(1);
-      expect(m.riesgoUpdate.mock.calls[0][0]).toMatchObject({ where: { id: 9 } });
+      expect(m.riesgoUpdate.mock.calls[0][0]).toMatchObject({
+        where: { id: 9 },
+      });
       expect(datosUpdate(m.riesgoUpdate).venceEn).toBeInstanceOf(Date);
-      expect(resultado.detalle).toMatchObject({ riesgosCreados: 0, riesgosRenovados: 1 });
+      expect(resultado.detalle).toMatchObject({
+        riesgosCreados: 0,
+        riesgosRenovados: 1,
+      });
     });
 
     it('marca NO_CORROBORADO si la lluvia medida no supera el umbral', async () => {
-      m.lecturaFindFirst.mockResolvedValue({ mm1h: 0, mm24h: 0, creadoEn: new Date() });
+      m.lecturaFindFirst.mockResolvedValue({
+        mm1h: 0,
+        mm24h: 0,
+        creadoEn: new Date(),
+      });
 
       const resultado = await crons.ejecutar('reevaluarReportes');
 
       expect(datosUpdate(m.reporteUpdate).tipo).toBe('NO_CORROBORADO');
       expect(m.riesgoCreate).not.toHaveBeenCalled();
-      expect(resultado.detalle).toMatchObject({ noCorroborados: 1, corroborados: 0 });
+      expect(resultado.detalle).toMatchObject({
+        noCorroborados: 1,
+        corroborados: 0,
+      });
     });
 
     it('no corrobora sin lectura climática reciente', async () => {
@@ -393,7 +510,9 @@ describe('CronsService', () => {
     });
 
     it('mantiene PENDIENTE una foto sin inundación', async () => {
-      m.reporteFindMany.mockResolvedValue([reporte({ clasificacion: 'NO_INUNDADO' })]);
+      m.reporteFindMany.mockResolvedValue([
+        reporte({ clasificacion: 'NO_INUNDADO' }),
+      ]);
 
       const resultado = await crons.ejecutar('reevaluarReportes');
 
@@ -414,7 +533,10 @@ describe('CronsService', () => {
 
       const resultado = await crons.ejecutar('reevaluarReportes');
 
-      expect(resultado).toMatchObject({ ejecutado: true, detalle: { evaluados: 0 } });
+      expect(resultado).toMatchObject({
+        ejecutado: true,
+        detalle: { evaluados: 0 },
+      });
       expect(m.lecturaFindFirst).not.toHaveBeenCalled();
     });
   });

@@ -254,8 +254,9 @@ interface ReporteCreadoResponse {
 ```
 
 > Nota: los campos expuestos al mapa derivan de `userLat` / `userLng` del modelo `Reporte`.
-> Nombre público `lat`/`lng` — confirmar al implementar si se expone la posición exacta del
-> reportero o solo la zona. `PENDIENTE DE VALIDACIÓN`.
+> Nombre público `lat`/`lng`: coordenadas exactas del reporte, aprobadas para
+> visualizar el punto junto con la información de elevación. El cálculo de una
+> superficie inundada a partir de estos puntos **no** forma parte del contrato actual.
 
 ---
 
@@ -290,7 +291,9 @@ interface ReporteCreadoResponse {
 }
 ```
 
-> La forma exacta del array `lecturas` (cuántas últimas) es `PENDIENTE DE VALIDACIÓN`.
+> `lecturas` contiene las últimas 25 lecturas. `mm24h` es `number` para `OPEN_METEO`
+> (acumulado de las últimas 24 horas) y `null` para `CONAGUA` (solo pronóstico
+> horario `mm1h`, sin acumulado histórico). El `mm24h` de `Zona` sigue siendo numérico.
 
 **Errores**: `404 ZONA_NO_ENCONTRADA`.
 
@@ -425,7 +428,8 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 | Por hora (48 h) | `/tools/GUI/webservices/?method=3` | Pronóstico por hora          |
 | Ciclones        | —                                  | **Sin API JSON documentada** |
 
-- **Host**: `https://smn.conagua.gob.mx` — **HOST PENDIENTE DE VALIDACIÓN** (probar antes de codificar).
+- **Host**: `https://smn.conagua.gob.mx` — comprobado con `method=3` el 2026-10-16
+  (respuesta gzip, IDs Mazatlán `ides=25`, `idmun=12`).
 - **Auth**: ninguna.
 - **Formato**: JSON comprimido (gzip) → descomprimir antes de parsear.
 - **Volumen**: devuelve **todos los municipios del país**; filtrar por `ides` + `idmun`
@@ -448,7 +452,9 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 | `lat`, `lon` | number              | coordenadas del municipio                   |
 
 **Normalización interna**: `prec` → mm por municipio.
-**Persistido**: `LecturaClima { fuente: CONAGUA }` de apoyo.
+**Persistido**: una `LecturaClima { fuente: CONAGUA, mm1h: pronóstico de la hora
+actual (nhor=0), mm24h: null }` de apoyo por municipio (en una zona representativa).
+No modifica el estado de `Zona` ni la histéresis de Open-Meteo.
 **Ciclones**: sin API confirmada → plan demo es `/admin/ciclon` manual (registro a mano).
 
 ---
@@ -515,9 +521,9 @@ const fechaFoto: Date | undefined = meta?.DateTimeOriginal;
 
 ## 7. Pendientes de validación antes de codificar
 
-- [ ] Host completo del web service de Conagua.
-- [ ] Modelo de Gemini vigente y límites del plan gratuito.
-- [ ] Límite exacto de tamaño de archivo para `foto` (configurable por env).
-- [ ] Si `GET /reportes` expone coordenada exacta o solo la zona.
+- [x] Host completo del web service de Conagua (comprobado 2026-10-16).
+- [ ] Cuota y acceso de `gemini-3.8-flash` para la clave real del despliegue.
+- [x] Límite de tamaño de `foto`: 10 MiB.
+- [x] `GET /reportes` expone coordenadas exactas por decisión del responsable.
 - [ ] Umbral de lluvia por municipio (parámetro, no constante).
 - [ ] CAPTCHA (Turnstile) en `POST /reportes`.

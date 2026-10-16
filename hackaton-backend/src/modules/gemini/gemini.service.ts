@@ -1,14 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
-import { EstadoZona } from '../../generated/prisma/enums.js';
 import { APP_ERRORS } from '../../common/exception/app-exception.js';
 
-// El clasificador de foto reutiliza los valores de `EstadoZona` (ver prisma/schema.prisma).
-// Por ahora SIN_DATOS queda fuera: la IA siempre debe decidir entre estos tres estados.
 export const CLASIFICACIONES_FOTO = [
-  EstadoZona.INUNDADO,
-  EstadoZona.PRECAUCION,
-  EstadoZona.NORMAL,
+  'INUNDADO',
+  'PARCIAL',
+  'NO_INUNDADO',
 ] as const;
 
 export type ClasificacionFoto = (typeof CLASIFICACIONES_FOTO)[number];
@@ -27,8 +24,8 @@ const SYSTEM_INSTRUCTION = `
 Eres un clasificador de fotos de calles para una app de alertas de inundación.
 Recibes UNA foto. Clasifícala como:
 - INUNDADO: agua cubriendo la calle o banqueta de forma evidente (acumulación, corriente, vehículos o casas con agua).
-- PRECAUCION: charcos grandes o agua en partes de la calle, pero transitable.
-- NORMAL: no hay agua acumulada relevante, o la imagen no muestra una calle/zona exterior.
+- PARCIAL: charcos grandes o agua en partes de la calle, pero transitable.
+- NO_INUNDADO: no hay agua acumulada relevante, o la imagen no muestra una calle/zona exterior.
 Responde solo con el JSON del esquema. No expliques.
 `.trim();
 
@@ -56,8 +53,7 @@ export class GeminiService {
       throw new Error('GEMINI_API_KEY no configurada en variables de entorno');
     }
     this.client = new GoogleGenAI({ apiKey });
-    // Confirmar modelo vigente en Google AI Studio. Usar flash para menor latencia/costo.
-    this.model = 'gemini-1.5-flash';
+    this.model = 'gemini-3.1-flash-lite';
   }
 
   async clasificarFoto(
@@ -70,49 +66,60 @@ export class GeminiService {
 
     const base64 = buffer.toString('base64');
 
-    try {
-      const response = await this.client.models.generateContent({
-        model: this.model,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: base64,
+    for (let intento = 0; intento < 2; intento += 1) {
+      try {
+        const response = await this.client.models.generateContent({
+          model: this.model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64,
+                  },
                 },
-              },
-            ],
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
+            abortSignal: AbortSignal.timeout(15_000),
           },
-        ],
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      });
+        });
 
-      const text = response.text ?? '{}';
-      const parsed = JSON.parse(text) as { clasificacion?: string };
+        const text = response.text ?? '{}';
+        const parsed = JSON.parse(text) as { clasificacion?: string };
 
-      if (!this.esClasificacionValida(parsed.clasificacion)) {
-        this.logger.warn(`Gemini respondió clasificación inválida: ${text}`);
+        if (!this.esClasificacionValida(parsed.clasificacion)) {
+          this.logger.warn('Gemini respondió una clasificación inválida.');
+          throw APP_ERRORS.GEMINI_NO_DISPONIBLE();
+        }
+
+        return parsed.clasificacion;
+      } catch (error) {
+        if (error && typeof error === 'object' && 'statusCode' in error)
+          throw error;
+        const status =
+          error && typeof error === 'object' && 'status' in error
+            ? Number(error.status)
+            : undefined;
+        if (
+          intento === 0 &&
+          ((status !== undefined && status >= 500) ||
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              ['AbortError', 'TimeoutError'].includes(error.name)))
+        )
+          continue;
+        this.logger.error('Error llamando a Gemini o procesando su respuesta.');
         throw APP_ERRORS.GEMINI_NO_DISPONIBLE();
       }
-
-      return parsed.clasificacion;
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        this.logger.error('Error parseando respuesta JSON de Gemini', error);
-      } else if (error && typeof error === 'object' && 'statusCode' in error) {
-        // Ya es un AppException, re-lanzar
-        throw error;
-      } else {
-        this.logger.error('Error llamando a Gemini', error);
-      }
-      throw APP_ERRORS.GEMINI_NO_DISPONIBLE();
     }
+    throw APP_ERRORS.GEMINI_NO_DISPONIBLE();
   }
 
   private esClasificacionValida(
