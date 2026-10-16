@@ -16,7 +16,7 @@ pnpm install
 cp .env.example .env        # completa DATABASE_URL, GEMINI_API_KEY, ADMIN_API_KEY...
 pnpm prisma:generate        # genera el cliente Prisma en src/generated/prisma
 pnpm prisma:migrate         # crea/actualiza el esquema en la base de datos
-pnpm prisma:seed            # datos demo: México → Sinaloa → Mazatlán
+pnpm prisma:seed            # datos demo: México → Sinaloa → Guasave
 pnpm start:dev
 ```
 
@@ -63,6 +63,33 @@ src/
 - Los datos externos (Open-Meteo, Conagua, Gemini) **solo** se consultan desde
   crons y reportes; los endpoints de lectura sirven desde PostgreSQL.
 - **Redis** es futuro (cache-aside), no forma parte del MVP.
+
+## Demo local con build
+
+Con `.env` configurado y PostgreSQL disponible:
+
+```bash
+pnpm prisma:generate
+pnpm prisma:deploy
+pnpm prisma:seed
+pnpm build
+pnpm start:prod
+```
+
+`prisma:seed` inserta o actualiza Guasave (25/11), una zona demo y un riesgo
+manual; no borra datos de otros municipios. Ejecutarlo solo en una base donde
+esté autorizada la escritura. Verifica `GET /api/v1/health` y
+`GET /api/v1/mapa/guasave`. La zona inicia en `SIN_DATOS`: al arrancar el backend
+se dispara la actualización climática sin bloquear HTTP, se expiran riesgos y,
+al terminar el clima, se reevaluan reportes. Mientras corre esa primera carga,
+el mapa puede mostrar todavía `SIN_DATOS`. Los crons periódicos continúan en
+los minutos 00, 15, 30 y 45 (clima), y cada 10 minutos (reportes).
+
+`POST /reportes` clasifica y guarda un reporte `PENDIENTE`; cada 10 minutos
+`reevaluarReportes` compara con lluvia reciente y, si lo corrobora, calcula
+una **estimación potencial de área** mediante celdas de elevación y la publica
+como círculos `INUNDACION/CLIMA` en `GET /mapa/guasave`. No son un polígono
+medido ni una certificación de inundación.
 
 La documentación detallada está en `docs/` (ARCHITECTURE, API_MANUAL,
 DEVELOPER_H, DEVELOPER_V, IDEA).

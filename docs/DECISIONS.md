@@ -28,7 +28,7 @@
 - Documento: `hackaton-backend/docs/ARCHITECTURE.md` §7.
 
 ## D-004 — Alcance geográfico: multi-municipio, demo Mazatlán
-- Estado: APROBADO
+- Estado: REEMPLAZADO por D-007 (2026-10-16)
 - Contexto: `IDEA.md` fijaba Ahome/Los Mochis; el interés actual es Mazatlán por la lluvia activa, con Guasave como ejemplo de búsqueda repetida.
 - Decisión: arquitectura multi-municipio sin valores codificados. Seed y demo iniciales en **Mazatlán**. Umbrales de lluvia parametrizados por municipio.
 - Alternativas: mantener Ahome (desactualizado), fijar solo Mazatlán (limitaría el diseño).
@@ -56,6 +56,14 @@
 - Aprobado por: Responsable del proyecto (confirmación verbal en sesión con agente).
 - Fecha: 2026-10-15.
 - Documento: `hackaton-backend/docs/ARCHITECTURE.md` §5.
+
+## D-007 — Demo Guasave y estimación de área de riesgo
+- Estado: APROBADO
+- Contexto: el responsable solicitó reemplazar Mazatlán como municipio de demo y estimar el área alrededor de reportes corroborados según la elevación del terreno.
+- Decisión: mantener arquitectura multi-municipio; el nuevo seed y la demo apuntan a **Guasave** (Conagua `ides=25`, `idmun=11`, verificado con method=3). Tras la corroboración, un cron estima celdas bajas conectadas a la coordenada reportada y las expone como círculos temporales `ZonaRiesgo(INUNDACION, CLIMA)` existentes. No se trata de un polígono medido ni de una inundación confirmada.
+- Impacto: no se eliminan municipios preexistentes de ninguna base. El mapa mantiene su contrato; la elevación se consulta desde el cron, nunca desde GET. El DEM puede ser impreciso y no sustituye una medición hidrológica.
+- Aprobado por: Responsable del proyecto (solicitud expresa en conversación).
+- Fecha: 2026-10-16.
 
 ## Plantilla de nueva decisión
 ### D-XXX — Título

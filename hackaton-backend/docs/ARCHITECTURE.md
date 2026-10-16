@@ -17,7 +17,7 @@ Características del cimiento:
 - Endpoints de administración protegidos con **`x-api-key`**.
 - **Rate limiting** global y agresivo en los endpoints que consumen Gemini.
 - Envelope de error consistente, message factory, filtro global de Prisma, Swagger.
-- Diseño **multi-municipio**; la demo inicial es **Mazatlán**.
+- Diseño **multi-municipio**; la demo actual es **Guasave** (D-007).
 - **Redis NO es dependencia del MVP**: se documenta como evolución futura (caché y rate limiting distribuido).
 
 ---
@@ -56,7 +56,7 @@ Gestor de paquetes: **pnpm**.
 | Escritura anónima | `POST /reportes` con rate limit estricto, validación de imagen y CAPTCHA (pendiente de decisión). |
 | Admin | `x-api-key` desde variable de entorno. Nunca en el frontend ni en Git. |
 | Crons | Internos, no expuestos como rutas públicas. Ejecución manual vía admin sólo para demo. |
-| Alcance geográfico | Multi-municipio. Demo: **Mazatlán**. Guasave = ejemplo de búsqueda repetida (ver §11). |
+| Alcance geográfico | Multi-municipio. Demo: **Guasave** (ver §11). |
 | Datos externos | Los clientes externos **no** se llaman desde endpoints de lectura. Se persisten por cron y se leen de PostgreSQL. |
 | Redis | Futuro. Cache-aside por municipio + contadores compartidos. Ver §10. |
 | Foto de reporte | Se procesa en memoria y **no se almacena**. |
@@ -75,7 +75,7 @@ hackaton-backend/
 ├── .env · .env.example
 ├── prisma/
 │   ├── schema.prisma          # modelos de IDEA.md §2
-│   └── seed.ts                # Pais → Estado → Municipio (Mazatlán) + ids SMN
+│   └── seed.ts                # Pais → Estado → Municipio (Guasave) + ids SMN
 └── src/
     ├── generated/prisma/      # cliente Prisma 7 (generado, git-ignored)
     ├── main.ts                # bootstrap + rawBody
@@ -137,7 +137,13 @@ Frontend ──► API pública (/mapa, /reportes, /zonas) ◄── lee Postgre
 Ningún endpoint de lectura invoca Open-Meteo, Conagua o Gemini en la petición.
 La única excepción es `POST /reportes`, que sí llama a Gemini de forma síncrona tras pasar el rate limit.
 
-Esto garantiza que una búsqueda repetida (ej. Guasave, o Mazatlán en la demo) sea barata:
+Al iniciar la aplicación, `CronsService` dispara en segundo plano `actualizarClima`
+y `expirarRiesgos`; cuando termina la actualización climática, ejecuta
+`reevaluarReportes`. La programación periódica sigue activa. Las invocaciones
+simultáneas del mismo trabajo en una instancia comparten su ejecución; ninguna
+lectura HTTP consulta directamente a proveedores.
+
+Esto garantiza que una búsqueda repetida (ej. Guasave en la demo) sea barata:
 1 consulta a la base, sin llamadas externas.
 
 ---
@@ -268,12 +274,13 @@ Reglas:
 
 - Arquitectura **multi-municipio**: nada está codificado a un municipio fijo.
 - `Municipio` soporta `idEstadoSmn` / `idMunSmn` para filtrar la respuesta nacional de Conagua.
-- **Demo inicial: Mazatlán** (municipio con lluvia activa a la fecha del hackathon).
-- **Guasave** se usa como ejemplo de búsqueda repetida que debe ser barata (caché futura).
+- **Demo actual: Guasave** (seed para nuevas demos). Mazatlán fue la demo anterior;
+  si ya existe en una base no se borra automáticamente.
+- Guasave también sirve como ejemplo de búsqueda repetida que debe ser barata (caché futura).
 - Los umbrales de lluvia (`PRECAUCION` / `INUNDADO`) son **parámetros por municipio**, no constantes.
 
 > Nota de coherencia: `IDEA.md` menciona Ahome / Los Mochis en seed, umbrales y fases.
-> Ese era el alcance anterior. El alcance acordado es multi-municipio con demo en Mazatlán.
+> Ese era el alcance anterior. El alcance acordado es multi-municipio con demo en Guasave (D-007).
 > `IDEA.md` no se modifica aquí; este documento prevalece para el alcance geográfico.
 
 ---

@@ -126,19 +126,19 @@ Respuesta `200`:
 
 | Param | Tipo | Requerido | Descripción |
 |---|---|---|---|
-| `municipioSlug` | string (path) | Sí | Slug del municipio, ej. `mazatlan` |
+| `municipioSlug` | string (path) | Sí | Slug del municipio, ej. `guasave` |
 
 **Response `200`** — `MapaResponse`:
 
 ```json
 {
-  "municipio": "mazatlan",
+  "municipio": "guasave",
   "actualizadoEn": "2026-10-15T19:45:00Z",
   "zonas": [
     {
       "id": 1,
-      "latCentro": 23.22,
-      "lngCentro": -106.42,
+      "latCentro": 25.5655,
+      "lngCentro": -108.4718,
       "ladoM": 9000,
       "estado": "PRECAUCION",
       "mm1h": 22.5,
@@ -148,8 +148,8 @@ Respuesta `200`:
   "zonasRiesgo": [
     {
       "id": 7,
-      "lat": 23.25,
-      "lng": -106.41,
+      "lat": 25.5655,
+      "lng": -108.4718,
       "radioM": 500,
       "motivo": "ALTURA",
       "origen": "MANUAL",
@@ -162,6 +162,14 @@ Respuesta `200`:
 **Errores**: `404 MUNICIPIO_NO_ENCONTRADO`.
 
 > Frontend: dibujar zonas con `L.rectangle(limites(z))` y riesgos con `L.circle`.
+> Un reporte corroborado genera un solo círculo `INUNDACION` / `CLIMA`
+> centrado en las coordenadas del reporte. Su radio, mínimo 500 m y vigencia
+> 3 días, representa la extensión aproximada de las **celdas bajas conectadas**;
+> no es un contorno medido de agua. Se muestrea una malla de 1 km
+> (hasta 25 celdas, 2 km desde el reporte), reteniendo solo vecinos por lado
+> con elevación no mayor a la del punto reportado + 1.5 m. Es una heurística
+> con incertidumbre del DEM, no un cálculo hidrológico. La elevación se calcula en el cron
+> de reevaluación; si el proveedor falla solo se registra un riesgo puntual.
 
 ---
 
@@ -184,8 +192,10 @@ Respuesta `200`:
 | `lng` | number | Sí | Dentro de una zona existente |
 
 **Pasos internos**: rate limit → leer EXIF (`DateTimeOriginal`) → verificar que `(lat,lng)` cae
-en una zona (`contiene`) → validar `ahora - (fechaFoto ?? ahora) <= 30 min` → clasificar con
-Gemini → guardar `Reporte`.
+en una zona (`contiene`) → validar diferencia de fecha de ±30 min → clasificar con
+Gemini → guardar `Reporte` como `PENDIENTE`. El cron `reevaluarReportes` decide la
+corroboración con lluvia reciente de Open-Meteo; **solo tras corroborar** consulta
+elevaciones y genera hasta 25 círculos de riesgo conectados de 500 m.
 
 **Response `201`**:
 
@@ -244,8 +254,8 @@ interface ReporteCreadoResponse {
       "fuente": "CIUDADANO",
       "tipo": "CORROBORADO",
       "clasificacion": "INUNDADO",
-      "lat": 23.22,
-      "lng": -106.42,
+      "lat": 25.5655,
+      "lng": -108.4718,
       "fechaFoto": "2026-10-15T19:30:00.000Z",
       "creadoEn": "2026-10-15T19:35:00.000Z"
     }
@@ -255,8 +265,9 @@ interface ReporteCreadoResponse {
 
 > Nota: los campos expuestos al mapa derivan de `userLat` / `userLng` del modelo `Reporte`.
 > Nombre público `lat`/`lng`: coordenadas exactas del reporte, aprobadas para
-> visualizar el punto junto con la información de elevación. El cálculo de una
-> superficie inundada a partir de estos puntos **no** forma parte del contrato actual.
+> visualizar el punto junto con la información de elevación. El área potencial
+> queda representada por los círculos `zonasRiesgo` de `GET /mapa`, no por un
+> polígono ni por un campo `superficieInundada`.
 
 ---
 
@@ -272,9 +283,9 @@ interface ReporteCreadoResponse {
 ```json
 {
   "id": 1,
-  "municipioSlug": "mazatlan",
-  "latCentro": 23.22,
-  "lngCentro": -106.42,
+  "municipioSlug": "guasave",
+  "latCentro": 25.5655,
+  "lngCentro": -108.4718,
   "ladoM": 9000,
   "estado": "PRECAUCION",
   "mm1h": 22.5,
@@ -429,7 +440,7 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 | Ciclones | — | **Sin API JSON documentada** |
 
 - **Host**: `https://smn.conagua.gob.mx` — comprobado con `method=3` el 2026-10-16
-  (respuesta gzip, IDs Mazatlán `ides=25`, `idmun=12`).
+  (respuesta gzip, IDs Guasave `ides=25`, `idmun=11`; Mazatlán `25`/`12`).
 - **Auth**: ninguna.
 - **Formato**: JSON comprimido (gzip) → descomprimir antes de parsear.
 - **Volumen**: devuelve **todos los municipios del país**; filtrar por `ides` + `idmun`

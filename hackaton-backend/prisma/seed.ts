@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 
-// Seed mínimo del MVP: México → Sinaloa → Mazatlán + una zona demo.
+// Seed mínimo del MVP: México → Sinaloa → Guasave + una zona demo.
 // Ejecutar con: pnpm prisma:seed  (o `pnpm prisma migrate dev` si configuras el seed).
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
@@ -27,33 +27,33 @@ async function main(): Promise<void> {
       create: { nombre: 'Sinaloa', paisId: pais.id },
     });
 
-    // Provisionales: validar ides/idmun contra una respuesta real de Conagua/SMN.
-    const idsSmnMazatlan = { idEstadoSmn: 25, idMunSmn: 12 };
+    // Verificados contra Conagua/SMN method=3: Guasave, Sinaloa (25/11).
+    const idsSmnGuasave = { idEstadoSmn: 25, idMunSmn: 11 };
     const municipio = await prisma.municipio.upsert({
-      where: { slug: 'mazatlan' },
-      update: idsSmnMazatlan,
+      where: { slug: 'guasave' },
+      update: idsSmnGuasave,
       create: {
-        nombre: 'Mazatlán',
-        slug: 'mazatlan',
+        nombre: 'Guasave',
+        slug: 'guasave',
         estadoId: estado.id,
-        ...idsSmnMazatlan,
+        ...idsSmnGuasave,
       },
     });
 
-    // Zona demo centrada en Mazatlán (centro histórico). Coordenadas reales de referencia.
+    // Centro de Guasave según el pronóstico horario SMN (25.5655, -108.4718).
     const zona = await prisma.zona.upsert({
       where: {
         latCentro_lngCentro_modelo: {
-          latCentro: 23.2494,
-          lngCentro: -106.4111,
+          latCentro: 25.5655,
+          lngCentro: -108.4718,
           modelo: 'ecmwf_ifs',
         },
       },
       update: {},
       create: {
         municipioId: municipio.id,
-        latCentro: 23.2494,
-        lngCentro: -106.4111,
+        latCentro: 25.5655,
+        lngCentro: -108.4718,
         ladoM: 9000,
       },
     });
@@ -70,8 +70,8 @@ async function main(): Promise<void> {
       await prisma.zonaRiesgo.create({
         data: {
           municipioId: municipio.id,
-          lat: 23.245,
-          lng: -106.415,
+          lat: 25.5655,
+          lng: -108.4718,
           radioM: 500,
           motivo: 'ALTURA',
           origen: 'MANUAL',
