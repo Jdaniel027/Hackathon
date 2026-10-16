@@ -9,6 +9,34 @@ interface PrimerError {
   field: string | null;
 }
 
+// Recorre el árbol de errores de class-validator y devuelve el primero con su código.
+function buscarPrimerError(
+  errors: ValidationError[],
+  rutaPadre = '',
+): PrimerError | null {
+  for (const error of errors) {
+    const ruta = rutaPadre ? `${rutaPadre}.${error.property}` : error.property;
+
+    if (error.constraints) {
+      const crudo = Object.values(error.constraints)[0];
+      const parseado = parseValidationMessage(crudo);
+      return {
+        code: parseado?.code ?? 'INVALID_INPUT',
+        message: parseado?.message ?? crudo,
+        field: ruta,
+      };
+    }
+
+    if (error.children && error.children.length > 0) {
+      const anidado = buscarPrimerError(error.children, ruta);
+      if (anidado) {
+        return anidado;
+      }
+    }
+  }
+  return null;
+}
+
 @Injectable()
 export class AppValidationPipe extends ValidationPipe {
   constructor() {
@@ -18,42 +46,14 @@ export class AppValidationPipe extends ValidationPipe {
       forbidNonWhitelisted: true,
       stopAtFirstError: true,
       transformOptions: { enableImplicitConversion: true },
+      exceptionFactory: (errors: ValidationError[]): AppBadRequestException => {
+        const primero = buscarPrimerError(errors);
+        return new AppBadRequestException(
+          primero?.code ?? 'INVALID_INPUT',
+          primero?.message ?? 'Entrada inválida.',
+          { field: primero?.field ?? null },
+        );
+      },
     } satisfies ValidationPipeOptions);
-  }
-
-  protected override exceptionFactory(errors: ValidationError[]): AppBadRequestException {
-    const primero = this.buscarPrimerError(errors);
-    return new AppBadRequestException(
-      primero?.code ?? 'INVALID_INPUT',
-      primero?.message ?? 'Entrada inválida.',
-      { field: primero?.field ?? null },
-    );
-  }
-
-  private buscarPrimerError(
-    errors: ValidationError[],
-    rutaPadre = '',
-  ): PrimerError | null {
-    for (const error of errors) {
-      const ruta = rutaPadre ? `${rutaPadre}.${error.property}` : error.property;
-
-      if (error.constraints) {
-        const crudo = Object.values(error.constraints)[0];
-        const parseado = parseValidationMessage(crudo);
-        return {
-          code: parseado?.code ?? 'INVALID_INPUT',
-          message: parseado?.message ?? crudo,
-          field: ruta,
-        };
-      }
-
-      if (error.children && error.children.length > 0) {
-        const anidado = this.buscarPrimerError(error.children, ruta);
-        if (anidado) {
-          return anidado;
-        }
-      }
-    }
-    return null;
   }
 }

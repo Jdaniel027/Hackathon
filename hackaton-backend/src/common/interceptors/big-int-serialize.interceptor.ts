@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
+import type {
+  CallHandler,
+  ExecutionContext,
+  NestInterceptor,
+} from '@nestjs/common';
 import { map } from 'rxjs';
 import type { Observable } from 'rxjs';
 
@@ -24,7 +28,10 @@ function serializar(valor: unknown): unknown {
 
 @Injectable()
 export class BigIntSerializeInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
+  intercept(
+    _context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<unknown> {
     return next.handle().pipe(map(serializar));
   }
 }

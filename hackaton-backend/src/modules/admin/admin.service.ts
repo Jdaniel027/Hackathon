@@ -10,11 +10,9 @@ import type { GenerarZonasDto } from './dto/generar-zonas.dto.js';
 import type { RegistrarCiclonDto } from './dto/registrar-ciclon.dto.js';
 import type { SimularLluviaDto } from './dto/simular-lluvia.dto.js';
 
-const PROLONGACION_CICLON_MS = 3 * 24 * 60 * 60 * 1000; // 3 días
 const PASO_MALLA_M = 1000;
 const UMBRAL_ALTURA_M = 1.5;
 const RADIO_RIESGO_ALTURA_M = 500;
-const RADIO_RIESGO_CICLON_M = 1500;
 
 export interface RiesgoAlturaResultado {
   zonaId: number;
@@ -65,18 +63,54 @@ export class AdminService {
       PASO_MALLA_M,
     );
     const elevaciones = await this.openMeteo.getElevaciones(puntos);
+    if (
+      elevaciones.length !== puntos.length ||
+      elevaciones.some((valor) => !Number.isFinite(valor))
+    ) {
+      throw APP_ERRORS.PROVEEDOR_EXTERNO('Open-Meteo');
+    }
     const mediana = this.mediana(elevaciones);
 
     const bajos = puntos.filter(
-      (_punto, indice) => (elevaciones[indice] ?? mediana) < mediana - UMBRAL_ALTURA_M,
+      (_punto, indice) =>
+        (elevaciones[indice] ?? mediana) < mediana - UMBRAL_ALTURA_M,
     );
 
     if (bajos.length === 0) {
-      return { zonaId, medianaM: mediana, puntosEvaluados: puntos.length, creados: 0 };
+      return {
+        zonaId,
+        medianaM: mediana,
+        puntosEvaluados: puntos.length,
+        creados: 0,
+      };
+    }
+
+    const existentes = await this.prisma.zonaRiesgo.findMany({
+      where: {
+        municipioId: zona.municipioId,
+        motivo: 'ALTURA',
+        origen: 'MANUAL',
+        activa: true,
+      },
+      select: { lat: true, lng: true },
+    });
+    const clave = (punto: PuntoZona): string =>
+      `${punto.latCentro}:${punto.lngCentro}`;
+    const clavesExistentes = new Set(
+      existentes.map((riesgo) => `${riesgo.lat}:${riesgo.lng}`),
+    );
+    const nuevos = bajos.filter((punto) => !clavesExistentes.has(clave(punto)));
+    if (nuevos.length === 0) {
+      return {
+        zonaId,
+        medianaM: mediana,
+        puntosEvaluados: puntos.length,
+        creados: 0,
+      };
     }
 
     const resultado = await this.prisma.zonaRiesgo.createMany({
-      data: bajos.map((punto) => ({
+      data: nuevos.map((punto) => ({
         municipioId: zona.municipioId,
         lat: punto.latCentro,
         lng: punto.lngCentro,
@@ -98,36 +132,12 @@ export class AdminService {
     };
   }
 
-  async registrarCiclon(dto: RegistrarCiclonDto): Promise<RegistrarCiclonResultado> {
-    const zona = await this.zonas.buscarZonaPorPunto(dto.lat, dto.lng);
-    if (!zona) {
-      throw APP_ERRORS.REPORT_FUERA_DE_ZONA();
-    }
-
-    const venceEn = new Date(Date.now() + PROLONGACION_CICLON_MS);
-
-    await this.prisma.$transaction([
-      this.prisma.zonaRiesgo.create({
-        data: {
-          municipioId: zona.municipioId,
-          lat: dto.lat,
-          lng: dto.lng,
-          radioM: RADIO_RIESGO_CICLON_M,
-          motivo: 'INUNDACION',
-          origen: 'CICLON',
-          venceEn,
-        },
-      }),
-      this.prisma.reporte.create({
-        data: {
-          zonaId: zona.id,
-          fuente: 'CICLON',
-          tipo: 'PENDIENTE',
-        },
-      }),
-    ]);
-
-    return { ok: true, zonaId: zona.id, venceEn: venceEn.toISOString() };
+  async registrarCiclon(
+    _dto: RegistrarCiclonDto,
+  ): Promise<RegistrarCiclonResultado> {
+    throw APP_ERRORS.NO_IMPLEMENTADO(
+      'El registro de ciclones está pendiente de integración.',
+    );
   }
 
   private mallaPuntos(
