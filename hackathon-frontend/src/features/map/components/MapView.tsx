@@ -16,21 +16,41 @@ import ReportMarkers from "./ReportMarkers";
 import ReportFiltersPanel from "./ReportFiltersPanel";
 import MapSelectionPopup from "./MapSelectionPopup";
 import RiskZonesLayer from "../../risk-zones/components/RiskZonesLayer";
+import LocationPickerOverlay from "./LocationPickerOverlay";
+import ReportFab from "./ReportFab";
+import MapHeaderControls from "./MapHeaderControls";
+import CompactZoneCard from "../../zone-details/components/CompactZoneCard";
 import { EMPTY_REPORT_FILTERS, filterReports } from "../lib/filterReports";
 import type { ReportFilters } from "../lib/filterReports";
 import type { MapSelection } from "../types/selection";
 import type { FloodReport } from "../types/report";
 import type { RiskZoneProperties } from "../../risk-zones/types/riskZone";
+import type { Coordinates } from "../../reports/types/citizenReport";
 
 // Configurar el Worker antes de crear el mapa
 setWorkerUrl(workerUrl);
 
-export default function MapView() {
+interface MapViewProps {
+  isLocationPickerMode?: boolean;
+  onConfirmLocation?: (coords: Coordinates) => void;
+  onCancelLocationPicker?: () => void;
+  onOpenReportModal?: () => void;
+  onMenuClick?: () => void;
+}
+
+export default function MapView({
+  isLocationPickerMode = false,
+  onConfirmLocation,
+  onCancelLocationPicker,
+  onOpenReportModal,
+  onMenuClick,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [pickerCoords, setPickerCoords] = useState<Coordinates | null>(null);
 
   // Única fuente de verdad de la selección activa del mapa.
   const [selection, setSelection] = useState<MapSelection | null>(null);
@@ -140,9 +160,49 @@ export default function MapView() {
     }
   }, [zonesVisible]);
 
+  useEffect(() => {
+    if (!mapInstance || !isLocationPickerMode) return;
+
+    const updateCoords = () => {
+      const center = mapInstance.getCenter();
+      setPickerCoords({ latitude: center.lat, longitude: center.lng });
+    };
+
+    updateCoords();
+    mapInstance.on("move", updateCoords);
+    return () => {
+      mapInstance.off("move", updateCoords);
+    };
+  }, [mapInstance, isLocationPickerMode]);
+
+  const handleLocateUser = useCallback(() => {
+    if (!mapInstance) return;
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          mapInstance.flyTo({
+            center: [pos.coords.longitude, pos.coords.latitude],
+            zoom: 15,
+            essential: true,
+          });
+        },
+        (err) => {
+          console.warn("⚠️ No se pudo obtener la geolocalización:", err.message);
+        },
+        { enableHighAccuracy: true, timeout: 8000 },
+      );
+    }
+  }, [mapInstance]);
+
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* Controles de cabecera: Menú y GPS */}
+      <MapHeaderControls
+        onMenuClick={onMenuClick}
+        onLocateClick={handleLocateUser}
+      />
 
       {!mapReady && !mapError && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -161,11 +221,13 @@ export default function MapView() {
       )}
 
       {/* Fuente de datos separada de la representación: los mocks se reemplazarán por el backend. */}
-      <ReportMarkers
-        map={mapInstance}
-        reports={filteredReports}
-        onSelectReport={handleSelectReport}
-      />
+      {!isLocationPickerMode && (
+        <ReportMarkers
+          map={mapInstance}
+          reports={filteredReports}
+          onSelectReport={handleSelectReport}
+        />
+      )}
 
       <RiskZonesLayer
         map={mapInstance}
@@ -175,17 +237,49 @@ export default function MapView() {
         onSelectZone={handleSelectZone}
       />
 
-      <MapSelectionPopup
-        map={mapInstance}
-        selection={selection}
-        onClose={handleCloseSelection}
-      />
+      {!isLocationPickerMode && (
+        <MapSelectionPopup
+          map={mapInstance}
+          selection={selection}
+          onClose={handleCloseSelection}
+        />
+      )}
 
-      <ReportFiltersPanel
-        filters={filters}
-        onChange={setFilters}
-        resultCount={filteredReports.length}
-      />
+      {!isLocationPickerMode && (
+        <ReportFiltersPanel
+          filters={filters}
+          onChange={setFilters}
+          resultCount={filteredReports.length}
+        />
+      )}
+
+      {/* Modo Selector de Ubicación (Pantalla 3) */}
+      {isLocationPickerMode ? (
+        <LocationPickerOverlay
+          currentCoordinates={pickerCoords}
+          onConfirm={() => {
+            if (pickerCoords && onConfirmLocation) {
+              onConfirmLocation(pickerCoords);
+            }
+          }}
+          onCancel={() => {
+            onCancelLocationPicker?.();
+          }}
+        />
+      ) : (
+        <>
+          {/* Ficha resumida de la zona en el fondo (Pantallas 1 y 2) */}
+          <CompactZoneCard
+            zoneName="Guasave"
+            riskStatusText="Zona de riesgo alto"
+          />
+
+          {/* Botón flotante para reportar inundación */}
+          {onOpenReportModal && (
+            <ReportFab onClick={onOpenReportModal} />
+          )}
+        </>
+      )}
     </div>
   );
 }
