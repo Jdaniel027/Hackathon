@@ -9,16 +9,16 @@
 
 ## 1. Convenciones generales
 
-| Tema | Convención |
-|---|---|
-| Prefijo | `/api/v1` |
-| Formato respuesta | `application/json` |
-| Envío de foto | `multipart/form-data` |
-| Fechas | ISO 8601 (`2026-10-15T19:45:00.000Z`) |
-| Coordenadas | `lat` ∈ [-90, 90], `lng` ∈ [-180, 180] |
-| Slug | minúsculas, sin acentos, separados por `-` |
+| Tema                 | Convención                                 |
+| -------------------- | ------------------------------------------ |
+| Prefijo              | `/api/v1`                                  |
+| Formato respuesta    | `application/json`                         |
+| Envío de foto        | `multipart/form-data`                      |
+| Fechas               | ISO 8601 (`2026-10-15T19:45:00.000Z`)      |
+| Coordenadas          | `lat` ∈ [-90, 90], `lng` ∈ [-180, 180]     |
+| Slug                 | minúsculas, sin acentos, separados por `-` |
 | Enum ausente en JSON | campo omitido o `null`, nunca cadena vacía |
-| Versionado | rompimiento de contrato ⇒ sube a `/api/v2` |
+| Versionado           | rompimiento de contrato ⇒ sube a `/api/v2` |
 
 ### Envelope de error (todas las respuestas de error)
 
@@ -36,24 +36,24 @@
 
 ### Códigos HTTP usados
 
-| Código | Cuándo |
-|---|---|
-| 400 | Validación de DTO, coordenadas inválidas, fecha inválida |
-| 403 | `x-api-key` ausente o inválida |
-| 404 | Municipio o zona inexistente |
-| 413 | Foto demasiado grande |
-| 415 | Tipo MIME no permitido |
-| 429 | Rate limit excedido (incluye `Retry-After`) |
-| 500 | Error interno |
-| 503 | Proveedor externo caído (cuando aplique) |
+| Código | Cuándo                                                   |
+| ------ | -------------------------------------------------------- |
+| 400    | Validación de DTO, coordenadas inválidas, fecha inválida |
+| 403    | `x-api-key` ausente o inválida                           |
+| 404    | Municipio o zona inexistente                             |
+| 413    | Foto demasiado grande                                    |
+| 415    | Tipo MIME no permitido                                   |
+| 429    | Rate limit excedido (incluye `Retry-After`)              |
+| 500    | Error interno                                            |
+| 503    | Proveedor externo caído (cuando aplique)                 |
 
 ### Rate limits por endpoint
 
-| Endpoint | Límite | TTL |
-|---|---:|---:|
-| `POST /reportes` | 2 | 15 min |
-| `/admin/*` | 40 | 15 min |
-| Resto de la API pública | 100 | 1 min |
+| Endpoint                | Límite |    TTL |
+| ----------------------- | -----: | -----: |
+| `POST /reportes`        |      2 | 15 min |
+| `/admin/*`              |     40 | 15 min |
+| Resto de la API pública |    100 |  1 min |
 
 ---
 
@@ -88,8 +88,8 @@ interface ZonaRiesgoMapa {
 }
 
 interface MapaResponse {
-  municipio: string;       // slug
-  actualizadoEn: string;   // ISO 8601
+  municipio: string; // slug
+  actualizadoEn: string; // ISO 8601
   zonas: ZonaMapa[];
   zonasRiesgo: ZonaRiesgoMapa[]; // solo activas = true
 }
@@ -101,10 +101,10 @@ interface MapaResponse {
 
 ### `GET /api/v1/health`
 
-| | |
-|---|---|
-| Acceso | Público |
-| Rate limit | global |
+|            |         |
+| ---------- | ------- |
+| Acceso     | Público |
+| Rate limit | global  |
 
 Respuesta `200`:
 
@@ -116,17 +116,17 @@ Respuesta `200`:
 
 ### `GET /api/v1/mapa/:municipioSlug`
 
-| | |
-|---|---|
-| Acceso | Público |
-| Rate limit | global |
-| Fuente | **Solo PostgreSQL** (sin llamadas externas) |
+|            |                                             |
+| ---------- | ------------------------------------------- |
+| Acceso     | Público                                     |
+| Rate limit | global                                      |
+| Fuente     | **Solo PostgreSQL** (sin llamadas externas) |
 
 **Request**
 
-| Param | Tipo | Requerido | Descripción |
-|---|---|---|---|
-| `municipioSlug` | string (path) | Sí | Slug del municipio, ej. `mazatlan` |
+| Param           | Tipo          | Requerido | Descripción                        |
+| --------------- | ------------- | --------- | ---------------------------------- |
+| `municipioSlug` | string (path) | Sí        | Slug del municipio, ej. `mazatlan` |
 
 **Response `200`** — `MapaResponse`:
 
@@ -167,21 +167,21 @@ Respuesta `200`:
 
 ### `POST /api/v1/reportes`
 
-| | |
-|---|---|
-| Acceso | Público (anónimo) |
-| Rate limit | **2 cada 15 min por IP** |
-| Content-Type | `multipart/form-data` |
-| Llamada externa | Gemini (síncrona) |
-| Foto | Se procesa en memoria, **no se guarda** |
+|                 |                                         |
+| --------------- | --------------------------------------- |
+| Acceso          | Público (anónimo)                       |
+| Rate limit      | **2 cada 15 min por IP**                |
+| Content-Type    | `multipart/form-data`                   |
+| Llamada externa | Gemini (síncrona)                       |
+| Foto            | Se procesa en memoria, **no se guarda** |
 
 **Request — campos**
 
-| Campo | Tipo | Requerido | Validación |
-|---|---|---|---|
-| `foto` | file | Sí | JPEG/PNG/WebP/HEIC/HEIF; MIME y contenido reales; límite de tamaño (ver env) |
-| `lat` | number | Sí | Dentro de una zona existente |
-| `lng` | number | Sí | Dentro de una zona existente |
+| Campo  | Tipo   | Requerido | Validación                                                                   |
+| ------ | ------ | --------- | ---------------------------------------------------------------------------- |
+| `foto` | file   | Sí        | JPEG/PNG/WebP/HEIC/HEIF; MIME y contenido reales; límite de tamaño (ver env) |
+| `lat`  | number | Sí        | Dentro de una zona existente                                                 |
+| `lng`  | number | Sí        | Dentro de una zona existente                                                 |
 
 **Pasos internos**: rate limit → leer EXIF (`DateTimeOriginal`) → verificar que `(lat,lng)` cae
 en una zona (`contiene`) → validar `ahora - (fechaFoto ?? ahora) <= 30 min` → clasificar con
@@ -209,29 +209,29 @@ interface ReporteCreadoResponse {
 
 **Errores**:
 
-| Código | HTTP | Causa |
-|---|---|---|
-| `RATE_LIMIT_EXCEEDED` | 429 | Ya se usaron los 2 intentos del cuarto de hora |
-| `REPORT_FUERA_DE_ZONA` | 400 | Las coordenadas no caen en ninguna zona |
-| `REPORT_FECHA_INVALIDA` | 400 | Foto con más de 30 min (por EXIF o servidor) |
-| `REPORT_ARCHIVO_INVALIDO` | 415/413 | MIME, contenido o tamaño inválido |
-| `GEMINI_NO_DISPONIBLE` | 503 | El clasificador no respondió |
+| Código                    | HTTP    | Causa                                          |
+| ------------------------- | ------- | ---------------------------------------------- |
+| `RATE_LIMIT_EXCEEDED`     | 429     | Ya se usaron los 2 intentos del cuarto de hora |
+| `REPORT_FUERA_DE_ZONA`    | 400     | Las coordenadas no caen en ninguna zona        |
+| `REPORT_FECHA_INVALIDA`   | 400     | Foto con más de 30 min (por EXIF o servidor)   |
+| `REPORT_ARCHIVO_INVALIDO` | 415/413 | MIME, contenido o tamaño inválido              |
+| `GEMINI_NO_DISPONIBLE`    | 503     | El clasificador no respondió                   |
 
 ---
 
 ### `GET /api/v1/reportes`
 
-| | |
-|---|---|
-| Acceso | Público |
-| Rate limit | global |
+|            |         |
+| ---------- | ------- |
+| Acceso     | Público |
+| Rate limit | global  |
 
 **Query**
 
-| Param | Tipo | Requerido | Descripción |
-|---|---|---|---|
-| `zonaId` | number | No | Filtra por zona |
-| `desde` | string ISO 8601 | No | Fecha mínima de creación |
+| Param    | Tipo            | Requerido | Descripción              |
+| -------- | --------------- | --------- | ------------------------ |
+| `zonaId` | number          | No        | Filtra por zona          |
+| `desde`  | string ISO 8601 | No        | Fecha mínima de creación |
 
 **Response `200`**:
 
@@ -261,10 +261,10 @@ interface ReporteCreadoResponse {
 
 ### `GET /api/v1/zonas/:id`
 
-| | |
-|---|---|
-| Acceso | Público |
-| Rate limit | global |
+|            |         |
+| ---------- | ------- |
+| Acceso     | Público |
+| Rate limit | global  |
 
 **Response `200`**: detalle de la zona con sus últimas lecturas.
 
@@ -298,9 +298,9 @@ interface ReporteCreadoResponse {
 
 ### `GET /api/v1/alertas/ciclon` (opcional)
 
-| | |
-|---|---|
-| Acceso | Público |
+|        |                                                          |
+| ------ | -------------------------------------------------------- |
+| Acceso | Público                                                  |
 | Estado | **OPCIONAL** — solo si hay fuente de ciclones confirmada |
 
 `PENDIENTE DE VALIDACIÓN`: no hay API JSON de ciclones confirmada (ver §5.3). El plan demo es
@@ -314,21 +314,21 @@ Todas requieren header `x-api-key` (igual a `ADMIN_API_KEY`). Rate limit 40 cada
 (configurable con `RATE_LIMIT_ADMIN_LIMIT` / `RATE_LIMIT_ADMIN_TTL_MS`; pensado para poder
 subirlo o desactivarlo durante pruebas, ya que la protección real es la API key).
 
-| Método | Ruta | Body | Efecto |
-|---|---|---|---|
-| POST | `/api/v1/admin/simular-lluvia` | `{ zonaId, mm1h, mm24h }` | Fuerza lectura/clima para la demo |
-| POST | `/api/v1/admin/cron/:nombre` | — | Ejecuta un cron a mano |
-| POST | `/api/v1/admin/zonas/generar` | `{ municipioSlug, sw, ne }` | Genera malla de zonas en un bounding box |
-| POST | `/api/v1/admin/riesgo-altura/:zonaId` | — | Corre el cálculo de riesgo por elevación |
-| POST | `/api/v1/admin/ciclon` | `{ lat, lng, categoria, vientoKmh }` | Registra un ciclón manualmente |
+| Método | Ruta                                  | Body                                 | Efecto                                   |
+| ------ | ------------------------------------- | ------------------------------------ | ---------------------------------------- |
+| POST   | `/api/v1/admin/simular-lluvia`        | `{ zonaId, mm1h, mm24h }`            | Fuerza lectura/clima para la demo        |
+| POST   | `/api/v1/admin/cron/:nombre`          | —                                    | Ejecuta un cron a mano                   |
+| POST   | `/api/v1/admin/zonas/generar`         | `{ municipioSlug, sw, ne }`          | Genera malla de zonas en un bounding box |
+| POST   | `/api/v1/admin/riesgo-altura/:zonaId` | —                                    | Corre el cálculo de riesgo por elevación |
+| POST   | `/api/v1/admin/ciclon`                | `{ lat, lng, categoria, vientoKmh }` | Registra un ciclón manualmente           |
 
 **Errores admin**:
 
-| Código | HTTP |
-|---|---|
-| `ADMIN_KEY_INVALIDA` | 403 |
-| `MUNICIPIO_NO_ENCONTRADO` | 404 |
-| `ZONA_NO_ENCONTRADA` | 404 |
+| Código                    | HTTP |
+| ------------------------- | ---- |
+| `ADMIN_KEY_INVALIDA`      | 403  |
+| `MUNICIPIO_NO_ENCONTRADO` | 404  |
+| `ZONA_NO_ENCONTRADA`      | 404  |
 
 > `nombre` en `/admin/cron/:nombre` debe validarse contra una lista cerrada
 > (`actualizarClima`, `reevaluarReportes`, `expirarRiesgos`, `revisarCiclones`); no ejecutar
@@ -343,25 +343,25 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 ### 5.1 Open-Meteo — Forecast (lluvia)
 
-| | |
-|---|---|
-| Método / URL | `GET https://api.open-meteo.com/v1/forecast` |
-| Auth | Ninguna |
-| Credencial | No |
+|                  |                                                  |
+| ---------------- | ------------------------------------------------ |
+| Método / URL     | `GET https://api.open-meteo.com/v1/forecast`     |
+| Auth             | Ninguna                                          |
+| Credencial       | No                                               |
 | Uso no comercial | Sí, con atribución. Límite < 10,000 llamadas/día |
 
 **Datos enviados**
 
-| Parámetro | Ejemplo | Para qué |
-|---|---|---|
-| `latitude` | `23.22,23.31,...` | Varias zonas por petición |
-| `longitude` | `-106.42,-106.33,...` | Mismo orden que latitude |
-| `hourly` | `precipitation` | mm por hora |
-| `past_hours` | `24` | Últimas 24 h |
-| `forecast_hours` | `1` | Hora actual / próxima |
-| `models` | `ecmwf_ifs` | Celda estable ~9 km |
-| `cell_selection` | `nearest` | Celda más cercana |
-| `timezone` | `America/Mazatlan` | Hora local |
+| Parámetro        | Ejemplo               | Para qué                  |
+| ---------------- | --------------------- | ------------------------- |
+| `latitude`       | `23.22,23.31,...`     | Varias zonas por petición |
+| `longitude`      | `-106.42,-106.33,...` | Mismo orden que latitude  |
+| `hourly`         | `precipitation`       | mm por hora               |
+| `past_hours`     | `24`                  | Últimas 24 h              |
+| `forecast_hours` | `1`                   | Hora actual / próxima     |
+| `models`         | `ecmwf_ifs`           | Celda estable ~9 km       |
+| `cell_selection` | `nearest`             | Celda más cercana         |
+| `timezone`       | `America/Mazatlan`    | Hora local                |
 
 **Respuesta original relevante** (arreglo, uno por coordenada):
 
@@ -378,10 +378,10 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 **Normalización interna**
 
-| Salida | Cálculo |
-|---|---|
-| `mm1h` | `precipitation` de la hora actual |
-| `mm24h` | suma de las últimas 24 horas |
+| Salida  | Cálculo                           |
+| ------- | --------------------------------- |
+| `mm1h`  | `precipitation` de la hora actual |
+| `mm24h` | suma de las últimas 24 horas      |
 
 **Persistido**: `LecturaClima { mm1h, mm24h, fuente: OPEN_METEO }` + actualiza `Zona`.
 **Descartado**: el resto del payload horario.
@@ -394,12 +394,12 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 ### 5.2 Open-Meteo — Elevation
 
-| | |
-|---|---|
+|              |                                               |
+| ------------ | --------------------------------------------- |
 | Método / URL | `GET https://api.open-meteo.com/v1/elevation` |
-| Auth | Ninguna |
-| Máximo | 100 coordenadas por petición |
-| Datos | Copernicus DEM GLO-90 (~90 m), con atribución |
+| Auth         | Ninguna                                       |
+| Máximo       | 100 coordenadas por petición                  |
+| Datos        | Copernicus DEM GLO-90 (~90 m), con atribución |
 
 **Datos enviados**: `latitude`, `longitude` (hasta 100).
 
@@ -419,11 +419,11 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 ### 5.3 Conagua / SMN
 
-| Servicio | Ruta | Contenido |
-|---|---|---|
-| Diario (3 días) | `/tools/GUI/webservices/?method=1` | Pronóstico por día |
-| Por hora (48 h) | `/tools/GUI/webservices/?method=3` | Pronóstico por hora |
-| Ciclones | — | **Sin API JSON documentada** |
+| Servicio        | Ruta                               | Contenido                    |
+| --------------- | ---------------------------------- | ---------------------------- |
+| Diario (3 días) | `/tools/GUI/webservices/?method=1` | Pronóstico por día           |
+| Por hora (48 h) | `/tools/GUI/webservices/?method=3` | Pronóstico por hora          |
+| Ciclones        | —                                  | **Sin API JSON documentada** |
 
 - **Host**: `https://smn.conagua.gob.mx` — **HOST PENDIENTE DE VALIDACIÓN** (probar antes de codificar).
 - **Auth**: ninguna.
@@ -435,17 +435,17 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 **Campos útiles (method=3)**
 
-| Campo | Tipo | Significado |
-|---|---|---|
-| `ides` | number/string | id de estado |
-| `idmun` | number/string | id de municipio |
-| `nes` | string | nombre de estado |
-| `nmun` | string | nombre de municipio |
-| `hloc` | string | hora local, ej. `20200812T20` |
-| `nhor` | number | número de hora |
-| `prec` | string con espacios | litros/m² = mm → `parseFloat(valor.trim())` |
-| `probprec` | string | probabilidad de precipitación (%) |
-| `lat`, `lon` | number | coordenadas del municipio |
+| Campo        | Tipo                | Significado                                 |
+| ------------ | ------------------- | ------------------------------------------- |
+| `ides`       | number/string       | id de estado                                |
+| `idmun`      | number/string       | id de municipio                             |
+| `nes`        | string              | nombre de estado                            |
+| `nmun`       | string              | nombre de municipio                         |
+| `hloc`       | string              | hora local, ej. `20200812T20`               |
+| `nhor`       | number              | número de hora                              |
+| `prec`       | string con espacios | litros/m² = mm → `parseFloat(valor.trim())` |
+| `probprec`   | string              | probabilidad de precipitación (%)           |
+| `lat`, `lon` | number              | coordenadas del municipio                   |
 
 **Normalización interna**: `prec` → mm por municipio.
 **Persistido**: `LecturaClima { fuente: CONAGUA }` de apoyo.
@@ -455,14 +455,14 @@ Regla general: los clientes externos solo **traen y normalizan**. Quien persiste
 
 ### 5.4 Gemini — clasificación de foto
 
-| | |
-|---|---|
-| SDK | `@google/genai` |
-| Credencial | `GEMINI_API_KEY` (solo backend) |
-| Modelo | **PENDIENTE DE VALIDACIÓN** (confirmar nombre vigente y límites del plan gratuito) |
-| Formatos | `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif` |
-| Imagen | inline base64; petición total < 20 MB |
-| Foto guardada | **Nunca** |
+|               |                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------- |
+| SDK           | `@google/genai`                                                                    |
+| Credencial    | `GEMINI_API_KEY` (solo backend)                                                    |
+| Modelo        | **PENDIENTE DE VALIDACIÓN** (confirmar nombre vigente y límites del plan gratuito) |
+| Formatos      | `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`                |
+| Imagen        | inline base64; petición total < 20 MB                                              |
+| Foto guardada | **Nunca**                                                                          |
 
 **Datos enviados**: solo la imagen (`inlineData { mime_type, data }`).
 
@@ -479,11 +479,11 @@ si falla → `GEMINI_NO_DISPONIBLE` (503).
 
 **Regla de corroboración** (evalúa el cron `reevaluarReportes`):
 
-| Condición | `TipoReporte` |
-|---|---|
-| Falta lectura reciente | `PENDIENTE` |
-| Foto `INUNDADO`/`PARCIAL` + lluvia reciente > umbral | `CORROBORADO` |
-| Foto `INUNDADO` con lluvia poca/nula | `NO_CORROBORADO` |
+| Condición                                            | `TipoReporte`    |
+| ---------------------------------------------------- | ---------------- |
+| Falta lectura reciente                               | `PENDIENTE`      |
+| Foto `INUNDADO`/`PARCIAL` + lluvia reciente > umbral | `CORROBORADO`    |
+| Foto `INUNDADO` con lluvia poca/nula                 | `NO_CORROBORADO` |
 
 ---
 
