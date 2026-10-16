@@ -1,234 +1,192 @@
 # UrbanGO Flood — Plan maestro de desarrollo del MVP
 
-> **Documento de referencia para el equipo y OpenCode.**
-> Estado: planificación inicial. Última revisión: 15 de octubre de 2026.
-> **Importante:** las interfaces y rutas propuestas aquí son contratos de trabajo, no afirmaciones sobre el código existente. Antes de modificar archivos, inspeccionar el repositorio.
+> Documento de referencia para el equipo y OpenCode. Revisión: 16 de octubre de 2026.
+>
+> **Estado:** reglas de producto acordadas; contratos y endpoints provisionales hasta validación con backend. **Antes de implementar, inspeccionar el repositorio.** Este documento no afirma que las tareas ya estén terminadas.
 
-## 1. Objetivo del proyecto
+## 1. Objetivo y alcance
 
-UrbanGO Flood es una aplicación web **mobile-first** para visualizar zonas susceptibles a inundarse, identificar zonas con inundaciones actuales y permitir que la ciudadanía envíe reportes con fotografías. El mapa es el elemento principal de la experiencia.
+UrbanGO Flood es una aplicación web **mobile-first** para visualizar áreas susceptibles a inundarse, identificar áreas con inundación **confirmada** y recibir reportes ciudadanos con fotografía. El mapa ocupa la pantalla principal.
 
 ### MVP obligatorio
 
-1. Visualizar **zonas de riesgo** con información contextual.
-2. Visualizar **zonas inundadas** y su estado actual, según datos disponibles y verificables.
-3. Visualizar reportes ciudadanos en el mapa y en los detalles de las zonas.
-4. Permitir crear reportes anónimos con **ubicación, fotografía y nivel observado** obligatorios; descripción opcional.
-5. Verificar reportes automáticamente mediante información de una API externa, **cuando la evidencia sea suficiente**, y mostrar su estado.
-6. Ofrecer una interfaz móvil clara: mapa, filtros de capas, panel de detalles y formulario.
+1. Mostrar zonas geográficas con **dos estados visuales públicos excluyentes**: **riesgo (amarillo)** e **inundada (rojo)**.
+2. Cambiar el color y el contenido informativo de una zona cuando el backend confirme una transición de estado; actualizar también cuando confirme el fin de la inundación.
+3. Ofrecer dos filtros independientes: **Zonas de riesgo** y **Zonas inundadas**; cada zona aparece en **solo uno** según su estado actual.
+4. Mostrar información contextual de zonas y reportes **confirmados** asociados, cuando existan, mediante un Bottom Sheet.
+5. Permitir enviar reportes anónimos con ubicación, fotografía y nivel observado obligatorios; descripción opcional.
+6. Procesar/verificar reportes desde backend con evidencia externa suficiente cuando sea posible; no exponer reportes pendientes ni rechazados en el mapa público.
+7. Ofrecer mapa, geolocalización, selección de zona, panel de detalles, selector de ubicación y formulario adaptados a móvil.
 
 ### Fuera del MVP
 
-- Autenticación y cuentas de usuario.
-- Búsqueda y recomendación de rutas alternativas (posible mejora posterior).
-- Simulación manual de escenarios de lluvia.
-- Visualización de lluvia en tiempo real.
-- Notificaciones push, panel administrativo y funciones no acordadas.
+- Cuentas/autenticación; rutas alternativas y recomendaciones de navegación; simulación manual de lluvia; capa de lluvia en tiempo real; notificaciones push; panel administrativo.
+- Capa de marcadores públicos de reportes, filtro de reportes y selección de reportes como entidades independientes del mapa.
 
-**Regla:** no ampliar el alcance sin aprobación explícita del equipo.
+**No ampliar alcance sin acuerdo del equipo.**
 
-## 2. Stack y estado del proyecto
+## 2. Tecnologías y estado conocido
 
 - Frontend: **React + Vite + TypeScript**.
-- Mapa: **MapLibre GL JS**.
-- Diseño: pantallas de referencia elaboradas en **Figma**, enfoque mobile-first.
-- Arquitectura: carpetas organizadas por funcionalidades (_feature-based_).
-- Estado conocido: se han hecho pruebas de integración del mapa; **no asumir que el resto está implementado**.
-- Backend: equipo separado, responsable de APIs externas, lógica de verificación, persistencia y contratos de endpoints.
+- Mapa: **MapLibre GL JS**, geometrías **GeoJSON**.
+- Diseño: referencia **Figma**, enfoque mobile-first, mapa a pantalla completa.
+- Arquitectura: organización por funcionalidades (_feature-based_).
+- Backend: equipo separado para clasificación de zonas, APIs externas, verificación, persistencia, fotografías y contratos de endpoints.
+- Se han realizado avances en mapa y GeoJSON; **inspeccionar el repositorio antes de marcar tareas completadas o reescribir código**.
 
-## 3. Reglas del dominio: no confundir conceptos
+## 3. Reglas del dominio
 
-### 3.1 Zona de riesgo
+### 3.1 Zona geográfica y estado visual
 
-Área susceptible a inundarse según una combinación de:
+Cada zona tiene una identidad y una geometría GeoJSON. Para el MVP, el backend proporciona su **estado visual público**:
 
-- Historial de inundaciones.
-- Reportes anteriores, privilegiando los confirmados.
-- Elevación del terreno, cuando exista una fuente fiable.
-- Cercanía a ríos/cuerpos de agua y otros factores geográficos, cuando haya datos.
+- `at_risk`: **amarillo**; susceptible a inundarse, sin inundación actual confirmada.
+- `flooded`: **rojo**; inundación actual confirmada con evidencia suficiente.
 
-**No significa que esté inundada actualmente.** La clasificación puede ser `low`, `medium`, `high` o `unknown`. La lógica de clasificación corresponde al backend; no inferir riesgo solo por cantidad de reportes, altura baja o proximidad a un río.
+**Una misma zona no se dibuja simultáneamente amarilla y roja.** Si cambia de `at_risk` a `flooded`, conserva su identidad y geometría cuando corresponda, pero cambian el color, la categoría de filtro y el contenido del Bottom Sheet. Al confirmar el fin de la inundación, puede volver a `at_risk` si sigue siendo zona de riesgo.
 
-### 3.2 Zona inundada / estado actual
+La clasificación histórica del riesgo (`low | medium | high | unknown`) es **un dato distinto** del estado visual; puede conservarse como información contextual, incluso cuando la zona esté inundada. **No mostrar `unknown` o falta de datos como prueba de que no hay agua.** La ausencia de confirmación no equivale a ausencia de inundación.
 
-Área con información sobre posible inundación actual, proveniente del backend y de datos externos de niveles de agua. El estado de inundación es independiente del riesgo histórico:
+**Limitación geográfica importante:** solo pintar de rojo la geometría que el backend considere confirmadamente afectada. Si solo se verifica una porción, el backend deberá suministrar una geometría más precisa o una división de zonas; no pintar todo un polígono como inundado por un reporte puntual.
 
-- `confirmed`: inundación confirmada por evidencia suficiente.
-- `unconfirmed`: posible inundación, aún sin confirmar.
-- `not_detected`: no se detecta inundación con los datos disponibles; **no garantiza ausencia de agua**.
-- `unknown`: no hay datos suficientes.
+### 3.2 Reportes ciudadanos y verificación
 
-La geometría de las zonas inundadas y de riesgo debe modelarse por separado, aunque se superpongan. No inventar polígonos confirmados a partir de un reporte pendiente.
+Reporte anónimo: ubicación, fotografía, nivel observado `low | medium | high`, descripción opcional. Estados internos:
 
-### 3.3 Reporte ciudadano
+- `pending`: no existe evidencia suficiente para confirmar o descartar.
+- `confirmed`: evidencia corroborada según reglas del backend.
+- `rejected`: evidencia suficiente para descartar.
 
-Campos obligatorios: coordenadas, fotografía, nivel observado `low | medium | high` elegido por el usuario. Descripción opcional. Reportes anónimos.
+Los reportes `pending` y `rejected` **no se publican en el mapa ni en el listado público de una zona**. Los `confirmed` pueden mostrarse **dentro de la pestaña Reportes de una zona asociada**, no como marcadores independientes.
 
-Estados:
+Un reporte confirmado **no cambia por sí solo** una zona a `flooded`: el backend debe confirmar también la inundación actual y el alcance geográfico. Si una API carece de cobertura, está desactualizada o indica valores normales, **no rechazar automáticamente** un reporte: conservar `pending` mientras no exista evidencia concluyente.
 
-- `pending`: aún sin corroboración suficiente.
-- `confirmed`: corroborado mediante evidencia externa aplicable a la ubicación y al momento.
-- `rejected`: descartado con evidencia suficiente.
+Al enviar un reporte, mostrar **confirmación privada de recepción solo después de respuesta exitosa**; explicar que está sujeto a verificación. No prometer que será publicado ni que cambiará el mapa inmediatamente.
 
-**Regla crítica:** si la API indica condiciones normales, está desactualizada o no cubre el punto reportado, **no rechazar automáticamente** el reporte. Dejar `pending` hasta disponer de evidencia suficiente. Un reporte pendiente no confirma por sí solo una inundación.
+### 3.3 Origen de la verdad y datos opcionales
 
-### 3.4 Datos opcionales
+El backend decide estado de zona, nivel de riesgo, transiciones, verificación y asociación reporte-zona. El frontend **solo presenta datos y maneja interacciones**. No inferir inundaciones con conteo de reportes, elevación aislada o proximidad a ríos.
 
-Mostrar cuando estén disponibles: fecha de última actualización, elevación del terreno, superficie aproximada en **km²**, fuente y fecha de datos. Mostrar “Sin datos” o no mostrar el campo cuando falte; nunca sustituir `null` por cero.
+Mostrar fecha de actualización, fuente, elevación (m) y superficie (km²) **solo cuando existan**. No reemplazar `null` por `0`. Los datos mock deben estar identificados como tales y no presentarse como evidencia real.
 
-### 3.5 Origen de la verdad
+## 4. Experiencia de usuario (referencia Figma)
 
-El **backend** determina niveles de riesgo, estados de inundación, verificación de reportes y asociaciones geográficas. El frontend representa los datos recibidos y maneja interacciones; no duplica algoritmos de verificación.
+### 4.1 Mapa
 
-## 4. Experiencia de usuario acordada
+- Mapa a pantalla completa en móvil; menú y botón de ubicación actual; botón flotante de cámara para reportar.
+- Dos filtros independientes: **Riesgo (amarillo)** e **Inundadas (rojo)**. Una zona que cambia de estado debe salir del filtro anterior y aparecer en el nuevo.
+- Seleccionar un polígono visible abre el Bottom Sheet con la información de esa zona.
+- Resaltar zona seleccionada; al ocultar su filtro, limpiar selección o cerrar su detalle de forma coherente.
+- No renderizar marcadores ni filtros de reportes públicos.
+- Manejar permisos denegados, ubicación no disponible, carga, errores y geometrías inválidas.
 
-### Mapa
+### 4.2 Bottom Sheet
 
-- Mapa a pantalla completa, optimizado para móvil.
-- Menú para alternar **independientemente** las capas `Zonas de riesgo`, `Zonas inundadas`, `Reportes ciudadanos`.
-- Botón para centrar ubicación actual, con manejo de permisos y errores.
-- Botón flotante de cámara para crear reporte.
-- Selección de polígonos o marcadores abre el panel correspondiente.
-- Cuando coincidan marcadores y polígonos, priorizar el marcador en la selección.
-- Si una capa se oculta, sus elementos no deben seguir siendo seleccionables de forma invisible.
+- Tres niveles: **compacto, resumen, expandido**; expansión por control/gesto y cierre sin bloquear permanentemente el mapa.
+- Contenido contextual para zona `at_risk` o `flooded`; actualizarlo al cambiar el estado de la zona seleccionada.
+- Pestañas **Información** y **Reportes**. La segunda muestra únicamente reportes confirmados asociados; si no hay, indicar **“No hay reportes confirmados disponibles para esta zona”**.
+- Fotografías ampliables a pantalla completa; campos ausentes con “Sin datos” cuando corresponda.
+- Evitar mensajes ambiguos como “Inundación sin confirmar” en una zona amarilla; usar “Sin inundación actual confirmada” si es pertinente, sin sugerir seguridad absoluta.
 
-### Bottom Sheet
+### 4.3 Crear reporte
 
-- Estados: compacto, resumen e información expandida.
-- Expansión/contracción por botón y arrastre vertical.
-- Cierre tocando fuera, sin bloquear permanentemente el mapa.
-- Pestañas `Información` y `Reportes` cuando apliquen.
-- Contenido distinto para zona de riesgo, zona inundada y reporte individual.
-- Estados vacíos específicos: “No hay reportes asociados” no debe usarse como mensaje genérico de falta de información.
-- Visor de fotografía a pantalla completa.
+1. Abrir modal **Reportar inundación** desde el botón flotante.
+2. Seleccionar ubicación mediante mapa móvil con pin fijo tipo gota; confirmar coordenadas.
+3. Volver al formulario **sin perder los demás campos**.
+4. Adjuntar y previsualizar fotografía (diseño: JPG/PNG, máximo 10 MB; validar límites con backend).
+5. Seleccionar nivel observado: bajo, medio o alto; descripción opcional.
+6. Mostrar aviso **“No te expongas para tomar una fotografía”**.
+7. Enviar, indicar carga y mostrar éxito **solo después de respuesta exitosa del backend**; mensaje de recepción y verificación pendiente.
+8. Al cerrar sin enviar, descartar borrador; ante error mientras sigue abierto, conservarlo para reintentar.
 
-### Creación de reporte
-
-1. Abrir formulario “Reportar inundación”.
-2. Seleccionar ubicación mediante mapa con pin fijo tipo gota y mapa móvil debajo.
-3. Confirmar coordenadas y regresar al formulario **sin perder los demás campos**.
-4. Adjuntar fotografía y previsualizarla (según diseño, JPG/PNG y máximo 10 MB; validar con backend).
-5. Seleccionar nivel observado bajo/medio/alto.
-6. Agregar descripción opcional.
-7. Mostrar aviso de seguridad: no exponerse para tomar una fotografía.
-8. Enviar al backend; mostrar confirmación **solo tras respuesta exitosa**.
-9. Si el usuario cierra el formulario antes de enviarlo, descartar sus datos. Si falla el envío mientras sigue abierto, conservarlos para reintentar.
-
-## 5. Distribución de responsabilidades
+## 5. Responsabilidades
 
 ### Frontend 1 (F1): mapa y geografía
 
-- Configuración y renderizado de MapLibre.
-- Capas GeoJSON de riesgo e inundación.
-- Colores/estilos de polígonos, controles y filtros de capas.
-- Marcadores de reportes y selección de elementos.
-- Geolocalización y centrado.
-- Selector de ubicación del formulario.
-- Servicios de lectura de información geográfica y adaptación al mapa.
-- Responsable de integrar cambios en `App.tsx` y coordinar la rama `develop`.
+- MapLibre, fuentes/capas GeoJSON, estilos amarillo/rojo y actualización de estado sin recrear el mapa.
+- Dos filtros, selección/resaltado de polígonos, controles, geolocalización y selector de ubicación.
+- Adaptación de datos geográficos del backend y carga/error/refresco.
+- Coordinación de integración en `App.tsx` y rama `develop`.
 
-**No implementar:** Bottom Sheet, tarjetas de detalle, formulario de reportes ni lógica de verificación del backend.
+**No implementar:** Bottom Sheet, formulario, galerías ni lógica de verificación. **No implementar marcadores de reportes.**
 
-### Frontend 2 (F2): interfaz y reportes
+### Frontend 2 (F2): paneles y reportes
 
-- Bottom Sheet y gestos.
-- Tarjetas, estados, pestañas y detalles de zonas y reportes.
-- Listado de reportes asociados y visor de fotografías.
-- Formulario, validaciones, carga de fotografías y mensajes de éxito/error.
-- Servicios de envío/consulta de reportes y adaptación de datos para UI.
+- Bottom Sheet, estados, gestos, tarjetas, pestañas y detalles de zona.
+- Listado de reportes confirmados asociados, fotos y visor.
+- Formulario, validación, envío y mensajes de éxito/error; servicios de reportes.
 
-**No implementar:** un segundo mapa, capas GeoJSON, lógica de selección de polígonos o geolocalización interna de MapLibre.
+**No implementar:** otro mapa, capas GeoJSON, selección de polígonos o geolocalización propia de MapLibre.
 
-### Backend (otro equipo)
+### Backend
 
-- Investigar y conectar API de niveles de agua y posible API de elevación.
-- Definir metodología de riesgo, disponibilidad de geometrías y verificación automática.
-- Definir endpoints, formatos de respuesta, paginación y errores.
-- Persistir reportes, estados y fotografías.
-- Determinar asociación entre reportes y zonas.
-- Proporcionar evidencia, fuente, fecha de actualización y cobertura de datos.
+- Clasificar zonas y suministrar estado visual `at_risk | flooded`, geometrías confirmadas y cambios de estado.
+- Investigar y conectar fuentes de elevación, agua e historial, según disponibilidad real.
+- Persistir y verificar reportes, fotos y asociaciones geográficas; exponer **solo confirmados** en consultas públicas de reportes por zona.
+- Definir endpoints, autenticidad de evidencia, errores, fechas de actualización y reglas de retorno a riesgo.
 
-**Pendiente de backend:** endpoints, contratos definitivos, almacenamiento de imágenes, cobertura/actualización de APIs, geometrías de zonas, disponibilidad de elevación y superficie.
+**Pendientes de acordar:** endpoints, esquemas definitivos, cobertura de APIs, granularidad de polígonos, refresco, almacenamiento de fotos y metodología de verificación.
 
 ## 6. Estructura propuesta del repositorio
 
 ```text
 src/
 ├── app/
-│   ├── App.tsx                     # Integración: F1
-│   └── providers/                  # Compartido, cambios coordinados
+│   ├── App.tsx                 # Integración coordinada por F1
+│   └── providers/              # Compartido
 ├── components/
-│   └── ui/                         # Compartido, cambios coordinados
+│   └── ui/                     # Compartido
 ├── features/
-│   ├── map/                        # F1: MapLibre, capas, marcadores, controles
+│   ├── map/                    # F1: MapLibre, polígonos, controles, selector
 │   │   ├── components/
 │   │   ├── hooks/
 │   │   └── types/
-│   ├── risk-zones/                 # F1: lógica de visualización geográfica
+│   ├── risk-zones/             # F1: adaptación/visualización de zonas
 │   │   ├── components/
 │   │   ├── hooks/
 │   │   └── types/
-│   ├── zone-details/               # F2: paneles y detalles de zonas
+│   ├── zone-details/           # F2: Bottom Sheet y detalles
 │   │   ├── components/
 │   │   └── hooks/
-│   └── reports/                    # F2: UI y servicios de reportes
+│   └── reports/                # F2: formulario, fotos, servicios
 │       ├── components/
 │       ├── hooks/
 │       ├── services/
 │       └── types/
-├── layouts/                         # F2: composición visual
-├── services/                        # F1: lectura geográfica / cliente compartido acordado
-├── hooks/                           # Compartido
-├── types/                           # Contratos compartidos
-├── lib/                             # Utilidades compartidas
-└── mocks/                           # Datos simulados basados en contratos
+├── layouts/                    # F2: composición visual
+├── services/                   # F1: datos geográficos / cliente acordado
+├── hooks/                      # Compartido
+├── types/                      # Contratos compartidos
+├── lib/                        # Utilidades compartidas
+└── mocks/                      # Ejemplos claramente simulados
 ```
 
-**Nota:** es una propuesta. Ajustar a las carpetas existentes sin mover o borrar código funcional innecesariamente. Los marcadores del mapa pertenecen a `features/map/`, aunque representen reportes. Evitar dos clientes HTTP distintos.
+**No crear/mover carpetas solo por ajustarse al diagrama:** respetar la estructura funcional existente. Evitar clientes HTTP duplicados.
 
 ## 7. Contratos provisionales para desarrollo paralelo
 
-Los siguientes tipos son **ejemplos a consensuar en Fase 0**. Pueden cambiar cuando backend entregue contratos definitivos. No asumir endpoints ni campos adicionales como reales.
+> Propuesta para acordar en Fase 0, **no afirmación de contratos existentes ni definitivos del backend**. Revisar librerías instaladas antes de importar tipos GeoJSON.
 
 ```ts
+type ZoneStatus = "at_risk" | "flooded";
 type RiskLevel = "low" | "medium" | "high" | "unknown";
-type FloodStatus = "confirmed" | "unconfirmed" | "not_detected" | "unknown";
 type ReportStatus = "pending" | "confirmed" | "rejected";
 type ObservedLevel = "low" | "medium" | "high";
-
 type Coordinates = { latitude: number; longitude: number };
 
-type MapSelection =
-  | { type: "risk-zone"; id: string }
-  | { type: "flood-zone"; id: string }
-  | { type: "report"; id: string }
-  | null;
+type MapSelection = { type: "zone"; id: string } | null;
+type LayerVisibility = { riskZones: boolean; floodedZones: boolean };
 
-type LayerVisibility = {
-  riskZones: boolean;
-  floodedZones: boolean;
-  reports: boolean;
-};
-
-// Geometría: usar GeoJSON Polygon/MultiPolygon y sus tipos de librería
-// solo después de revisar dependencias instaladas.
-type RiskZone = {
+type Zone = {
   id: string;
   name: string;
-  riskLevel: RiskLevel;
-  geometry: unknown; // sustituir por tipo GeoJSON acordado
+  status: ZoneStatus;
+  riskLevel?: RiskLevel | null;
+  geometry: unknown; // sustituir por GeoJSON Polygon | MultiPolygon
   elevationMeters?: number | null;
   areaKm2?: number | null;
   updatedAt?: string | null;
-};
-
-type FloodZone = {
-  id: string;
-  name?: string;
-  status: FloodStatus;
-  geometry: unknown; // sustituir por tipo GeoJSON acordado
-  updatedAt?: string | null;
-  areaKm2?: number | null;
+  source?: string | null;
 };
 
 type CitizenReport = {
@@ -243,295 +201,243 @@ type CitizenReport = {
 };
 ```
 
-**Contrato de interacción sugerido:**
+**Nota:** `CitizenReport` representa el modelo interno. Los endpoints públicos por zona deben entregar únicamente reportes confirmados; el frontend puede filtrar defensivamente, pero **la privacidad debe imponerse en backend**. El estado de la zona y el de los reportes son distintos.
 
-- `MapView` recibe datos y visibilidad de capas; emite `onSelect(MapSelection)`.
-- `MapView` no abre ni manipula directamente `BottomSheet`.
-- `App` o un controlador acordado mantiene `selection`, `activePanel`, `layerVisibility` y modo de selección de ubicación.
-- `ZoneDetails` y `ReportDetails` reciben entidades por props y emiten acciones por callbacks.
+**Interacciones acordadas:**
+
+- `MapView` recibe zonas y visibilidad; emite `onSelect(MapSelection)`; **no controla Bottom Sheet**.
+- `App` o controlador mantiene `selection`, `activePanel`, `layerVisibility` y modo de ubicación.
+- `ZoneDetails` recibe zona seleccionada y reportes confirmados asociados, con callbacks de cierre y navegación.
 - `LocationPicker` emite `onConfirm(Coordinates)` y `onCancel()`.
-- `ReportForm` recibe coordenadas confirmadas; solicita abrir el selector mediante callback; mantiene sus propios campos.
-- `ReportForm` utiliza un servicio de envío intercambiable (mock/real), no llama directamente a MapLibre.
-- La actualización de reportes tras envío debe notificar al mapa para recargar/actualizar marcadores.
+- `ReportForm` conserva sus campos al abrir/cerrar el selector y usa un servicio intercambiable mock/real.
+- Después del envío, **no crear marcador público**; las zonas solo cambian si el backend devuelve después un nuevo estado confirmado.
+- Tipos compartidos se definen una sola vez; adaptar al contrato real sin duplicarlos.
 
-**Importante:** los estados y contratos se definen una vez, en una ubicación compartida. No duplicar definiciones incompatibles entre `features`.
-
-## 8. Fases de desarrollo y tareas concretas
+## 8. Fases de desarrollo y tareas
 
 ### FASE 0 — Preparación conjunta (bloqueante)
 
-| ID    | Responsable | Tarea                                                                                  |
-| ----- | ----------- | -------------------------------------------------------------------------------------- |
-| P0-01 | F1          | Revisar repo, dependencias, estructura y pruebas existentes; preservar mapa funcional. |
-| P0-02 | Ambos       | Definir tipos compartidos de zonas, inundaciones, reportes y coordenadas.              |
-| P0-03 | Ambos       | Definir props, callbacks, estado de selección y reglas de interacción.                 |
-| P0-04 | Ambos       | Crear mocks representativos (incluyendo estados desconocidos y datos faltantes).       |
-| P0-05 | Ambos       | Documentar propiedad de archivos y procedimiento de integración.                       |
-| P0-06 | F1          | Preparar `develop`, `feature/map` y `feature/ui-reports` desde la misma base.          |
-| P0-07 | Ambos       | Ejecutar aplicación y compilación con éxito.                                           |
+| ID    | Responsable | Tarea                                                                                                     |
+| ----- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| P0-01 | F1          | Inspeccionar repo, dependencias, estructura y avances; preservar mapa funcional.                          |
+| P0-02 | Ambos       | Acordar `Zone`, `ZoneStatus`, `CitizenReport`, coordenadas y visibilidad.                                 |
+| P0-03 | Ambos       | Acordar props, callbacks, selección y transición de zona.                                                 |
+| P0-04 | Ambos       | Preparar mocks: riesgo, inundada, transición, datos ausentes y reportes internos/confirmados.             |
+| P0-05 | Ambos       | Documentar propiedad de archivos y puntos de integración.                                                 |
+| P0-06 | F1          | Verificar/preparar `develop`, `feature/map`, `feature/ui-reports` desde la misma base sin perder avances. |
+| P0-07 | Ambos       | Ejecutar aplicación y compilación con éxito.                                                              |
 
-**Aceptación:** ambos pueden importar contratos y mocks comunes, compilar y trabajar sin modificar archivos del otro. Hacer commit de esta base antes de crear ramas de trabajo.
+**Aceptación:** ambos importan contratos/mocks comunes sin duplicación, compilan y pueden trabajar en paralelo. Acordar cuándo consolidar la base; OpenCode no hace commits sin autorización.
 
 ### FASE 1 — Mapa e interfaz base (paralela)
 
-**Frontend 1**
+| ID    | Responsable | Tarea                                                                |
+| ----- | ----------- | -------------------------------------------------------------------- |
+| F1-01 | F1          | Ajustar mapa a pantalla completa móvil según Figma.                  |
+| F1-02 | F1          | Renderizar polígonos GeoJSON de zonas con ID estable.                |
+| F1-03 | F1          | Aplicar amarillo `at_risk` y rojo `flooded`, sin duplicar polígonos. |
+| F1-04 | F1          | Actualizar color/categoría al cambiar el estado mock de una zona.    |
+| F1-05 | F1          | Crear controles flotantes y estados básicos del mapa.                |
+| F2-01 | F2          | Crear componentes/estilos reutilizables según Figma.                 |
+| F2-02 | F2          | Crear Bottom Sheet reutilizable.                                     |
+| F2-03 | F2          | Crear vistas compacto, resumen y expandido.                          |
+| F2-04 | F2          | Crear encabezados, tarjetas e indicadores de zona.                   |
+| F2-05 | F2          | Crear vistas de información para riesgo e inundación.                |
+| F2-06 | F2          | Crear pestañas Información y Reportes.                               |
 
-| ID    | Tarea                                                        |
-| ----- | ------------------------------------------------------------ |
-| F1-01 | Ajustar MapLibre a diseño móvil a pantalla completa.         |
-| F1-02 | Renderizar GeoJSON de zonas de riesgo.                       |
-| F1-03 | Renderizar GeoJSON de zonas inundadas, separado del riesgo.  |
-| F1-04 | Aplicar estilos según riesgo y estado, incluyendo `unknown`. |
-| F1-05 | Crear controles flotantes del mapa.                          |
-| F1-06 | Mostrar marcadores de reportes simulados.                    |
-
-**Frontend 2**
-
-| ID    | Tarea                                                     |
-| ----- | --------------------------------------------------------- |
-| F2-01 | Establecer componentes/estilos reutilizables según Figma. |
-| F2-02 | Crear Bottom Sheet reutilizable.                          |
-| F2-03 | Crear vistas compacto, resumen y expandido.               |
-| F2-04 | Crear encabezados, tarjetas e indicadores de estado.      |
-| F2-05 | Crear vistas de zona de riesgo e inundación.              |
-| F2-06 | Crear pestañas Información y Reportes.                    |
-
-**Aceptación:** mapa con capas y marcadores mock; paneles renderizables de forma independiente con mocks. Integración visual básica sin bloqueo del mapa.
+**Aceptación:** mapa con zonas amarillas/rojas y transición mock; paneles independientes con datos simulados; sin marcadores de reportes.
 
 ### FASE 2 — Interacciones principales (paralela)
 
-**Frontend 1**
+| ID    | Responsable | Tarea                                                            |
+| ----- | ----------- | ---------------------------------------------------------------- |
+| F1-06 | F1          | Menú con exactamente dos filtros de zonas.                       |
+| F1-07 | F1          | Alternar zonas `at_risk` independientemente.                     |
+| F1-08 | F1          | Alternar zonas `flooded` independientemente.                     |
+| F1-09 | F1          | Seleccionar polígonos visibles y emitir ID.                      |
+| F1-10 | F1          | Resaltar selección y limpiarla al cerrar/ocultar/cambiar estado. |
+| F1-11 | F1          | Centrar ubicación con permisos y errores.                        |
+| F2-07 | F2          | Gestos para expandir/contraer Bottom Sheet.                      |
+| F2-08 | F2          | Controles para cambiar estados del panel.                        |
+| F2-09 | F2          | Cerrar sin bloquear interacción con el mapa.                     |
+| F2-10 | F2          | Adaptar contenido al estado de la zona seleccionada.             |
+| F2-11 | F2          | Hacer funcionales las pestañas.                                  |
+| F2-12 | F2          | Manejar estados vacíos y campos faltantes.                       |
+| F2-13 | F2          | Adaptar a distintos tamaños y teclado móvil.                     |
 
-| ID    | Tarea                                                          |
-| ----- | -------------------------------------------------------------- |
-| F1-07 | Crear menú de filtros de capas.                                |
-| F1-08 | Alternar zonas de riesgo independientemente.                   |
-| F1-09 | Alternar zonas inundadas independientemente.                   |
-| F1-10 | Alternar marcadores de reportes independientemente.            |
-| F1-11 | Detectar selección de polígonos y marcadores y emitir tipo/ID. |
-| F1-12 | Resaltar selección y limpiar resaltado al cerrar/cambiar.      |
-| F1-13 | Implementar centrado de ubicación con permisos y fallos.       |
+**Aceptación:** seleccionar zona abre su panel, filtros funcionan, elementos ocultos no se seleccionan, transición actualiza el panel.
 
-**Frontend 2**
+### FASE 3 — Consulta de reportes confirmados (paralela)
 
-| ID    | Tarea                                                    |
-| ----- | -------------------------------------------------------- |
-| F2-07 | Gestos para expandir/contraer Bottom Sheet.              |
-| F2-08 | Botones para cambiar entre estados del panel.            |
-| F2-09 | Cerrar al tocar fuera, sin impedir interacción con mapa. |
-| F2-10 | Adaptar contenido al tipo de selección.                  |
-| F2-11 | Hacer funcionales las pestañas.                          |
-| F2-12 | Estados vacíos y datos no disponibles.                   |
-| F2-13 | Adaptar a diferentes alturas y tamaños de pantalla.      |
+| ID    | Responsable | Tarea                                                                       |
+| ----- | ----------- | --------------------------------------------------------------------------- |
+| F1-12 | F1          | Mantener selección de zona durante actualización de datos si sigue visible. |
+| F1-13 | F1          | Limpiar/ajustar selección cuando la zona cambia de filtro o desaparece.     |
+| F1-14 | F1          | Preparar actualización/refresco de datos de zonas con mocks.                |
+| F2-14 | F2          | Listar reportes **confirmados** asociados a la zona.                        |
+| F2-15 | F2          | Mostrar fecha, foto, ubicación, nivel observado y descripción disponible.   |
+| F2-16 | F2          | Visor de fotografías a pantalla completa.                                   |
+| F2-17 | F2          | Estado vacío: no hay reportes confirmados disponibles.                      |
+| F2-18 | F2          | Evitar exposición pública de `pending` y `rejected` en la UI.               |
 
-**Aceptación:** seleccionar zona o reporte abre el contenido adecuado; filtros y gestos funcionan de forma independiente; no se seleccionan elementos ocultos.
+**Aceptación:** desde una zona se consultan únicamente reportes confirmados; no hay marcadores ni selección individual de reportes en el mapa.
 
-### FASE 3 — Consulta de reportes existentes (paralela)
+### FASE 4 — Creación de reportes y ubicación (paralela)
 
-**Frontend 1**
+| ID    | Responsable | Tarea                                                         |
+| ----- | ----------- | ------------------------------------------------------------- |
+| F1-15 | F1          | Modo de selección de ubicación sobre MapLibre.                |
+| F1-16 | F1          | Pin fijo centrado y mapa móvil debajo.                        |
+| F1-17 | F1          | Capturar coordenadas del centro indicado.                     |
+| F1-18 | F1          | Opción de usar ubicación actual.                              |
+| F1-19 | F1          | Confirmar/cancelar y devolver coordenadas por callback.       |
+| F2-19 | F2          | Modal Reportar inundación.                                    |
+| F2-20 | F2          | Campo de ubicación que solicita selector externo.             |
+| F2-21 | F2          | Subir/previsualizar fotografía.                               |
+| F2-22 | F2          | Selector bajo/medio/alto y descripción opcional.              |
+| F2-23 | F2          | Validar obligatorios, tipo y tamaño de foto.                  |
+| F2-24 | F2          | Cerrar descartando borrador; conservarlo si falla envío.      |
+| F2-25 | F2          | Servicio mock sustituible por backend.                        |
+| F2-26 | F2          | Carga, errores y confirmación privada tras respuesta exitosa. |
+| F2-27 | F2          | Mantener datos del formulario al usar selector de ubicación.  |
 
-| ID    | Tarea                                                                                                                 |
-| ----- | --------------------------------------------------------------------------------------------------------------------- |
-| F1-14 | Marcadores diferenciables y accesibles.                                                                               |
-| F1-15 | Selección de marcadores.                                                                                              |
-| F1-16 | Prioridad de marcador frente a polígono superpuesto.                                                                  |
-| F1-17 | Enfocar reporte seleccionado en el mapa.                                                                              |
-| F1-18 | Preparar asociación geográfica de reportes a zonas **según contrato del backend**; sin inventar algoritmo definitivo. |
-
-**Frontend 2**
-
-| ID    | Tarea                                      |
-| ----- | ------------------------------------------ |
-| F2-14 | Resumen de reporte individual.             |
-| F2-15 | Detalle completo de reporte.               |
-| F2-16 | Foto, fecha, ubicación y nivel observado.  |
-| F2-17 | Estados pendiente, confirmado y rechazado. |
-| F2-18 | Visor de fotografía a pantalla completa.   |
-| F2-19 | Lista de reportes asociados a una zona.    |
-| F2-20 | Estado vacío de reportes.                  |
-
-**Aceptación:** desde un marcador o una zona se pueden consultar reportes simulados y fotos; un reporte pendiente no aparece como inundación confirmada.
-
-### FASE 4 — Creación de reportes y selector de ubicación (paralela)
-
-**Frontend 1**
-
-| ID    | Tarea                                                      |
-| ----- | ---------------------------------------------------------- |
-| F1-19 | Crear modo/pantalla de selección de ubicación en MapLibre. |
-| F1-20 | Pin fijo tipo gota, centrado.                              |
-| F1-21 | Mover mapa bajo el pin.                                    |
-| F1-22 | Capturar coordenadas correctas del punto indicado.         |
-| F1-23 | Opción de usar ubicación actual.                           |
-| F1-24 | Confirmar/cancelar selección.                              |
-| F1-25 | Devolver coordenadas al formulario por callback.           |
-
-**Frontend 2**
-
-| ID    | Tarea                                                    |
-| ----- | -------------------------------------------------------- |
-| F2-21 | Modal Reportar inundación.                               |
-| F2-22 | Campo de ubicación y solicitud de selector externo.      |
-| F2-23 | Carga de foto y vista previa.                            |
-| F2-24 | Selector de nivel observado.                             |
-| F2-25 | Descripción opcional.                                    |
-| F2-26 | Validaciones de campos obligatorios y fotografía.        |
-| F2-27 | Cierre descartando datos no enviados.                    |
-| F2-28 | Servicio de envío mock con interfaz sustituible.         |
-| F2-29 | Carga, éxito tras respuesta y confirmación.              |
-| F2-30 | Errores de envío sin perder datos mientras siga abierto. |
-
-**Aceptación:** flujo completo con mock: abrir formulario → seleccionar ubicación → conservar otros campos → adjuntar foto → enviar → éxito; cerrar sin enviar descarta formulario.
+**Aceptación:** formulario completo con mock; el envío no genera marcador ni cambia automáticamente el color de zona.
 
 ### FASE 5 — Integración con backend (coordinada)
 
-| ID     | Responsable | Tarea                                                               |
-| ------ | ----------- | ------------------------------------------------------------------- |
-| F1-26  | F1          | Conectar lectura real de zonas de riesgo.                           |
-| F1-27  | F1          | Conectar lectura real de zonas inundadas.                           |
-| F1-28  | F1          | Refrescar capas y manejar carga/error/datos ausentes.               |
-| F1-29  | F1          | Conectar lectura/actualización de marcadores de reportes.           |
-| F2-31  | F2          | Consultar información detallada de zonas.                           |
-| F2-32  | F2          | Consultar reportes y estados.                                       |
-| F2-33  | F2          | Conectar envío real del formulario.                                 |
-| F2-34  | F2          | Conectar subida/almacenamiento de fotografía según backend.         |
-| F2-35  | F2          | Actualizar UI tras respuesta de verificación, incluyendo pendiente. |
-| INT-01 | Ambos       | Confirmar que un nuevo reporte se refleja en mapa y detalles.       |
+| ID     | Responsable | Tarea                                                                                                       |
+| ------ | ----------- | ----------------------------------------------------------------------------------------------------------- |
+| F1-20  | F1          | Consultar zonas y geometrías reales según endpoint acordado.                                                |
+| F1-21  | F1          | Aplicar estados confirmados y transiciones de color/categoría.                                              |
+| F1-22  | F1          | Refrescar datos y manejar carga/error/ausencia de cobertura.                                                |
+| F2-28  | F2          | Consultar detalle de zona.                                                                                  |
+| F2-29  | F2          | Consultar únicamente reportes confirmados asociados.                                                        |
+| F2-30  | F2          | Enviar reportes reales y fotografías según contrato.                                                        |
+| F2-31  | F2          | Mostrar recepción y estado privado de verificación si backend lo devuelve.                                  |
+| INT-01 | Ambos       | Confirmar que un envío pendiente no aparece públicamente.                                                   |
+| INT-02 | Ambos       | Confirmar que solo una actualización verificada de backend cambia la zona de amarillo a rojo (o viceversa). |
 
-**Aceptación:** flujos funcionando con backend real, o bloqueos documentados claramente si falta una API. No marcar como completa la verificación real usando únicamente mocks.
+**Aceptación:** integración real o bloqueos documentados; no declarar verificación real cuando solo hay mocks.
 
-### FASE 6 — Pruebas, integración y entrega (conjunta)
+### FASE 6 — Pruebas y entrega
 
-**Frontend 1:** capas, filtros, selección, superposiciones, permisos de geolocalización, precisión del pin, rendimiento móvil.
-
-**Frontend 2:** gestos, pestañas, formularios, fotos, errores, estados vacíos, teclado móvil, accesibilidad básica.
-
-**Ambos:** seleccionar zona → ver detalles; seleccionar reporte → ver foto/estado; crear reporte → elegir ubicación → enviar; comprobar estado verificado o pendiente; reflejar nuevo reporte en mapa; compilar y probar en móvil.
-
-**Aceptación:** demostración end-to-end del MVP sin datos inventados presentados como reales, compilación exitosa y errores controlados.
+- **F1:** colores, filtros, selección, transiciones, geometría real, permisos, ubicación y rendimiento móvil.
+- **F2:** Bottom Sheet, pestañas, fotos, formularios, validaciones, estados vacíos, teclado y accesibilidad.
+- **Ambos:** zona amarilla → backend confirma inundación → roja con nuevo detalle; inundación termina → amarillo cuando corresponda; reporte enviado → acuse privado sin publicación automática; consulta pública solo de reportes confirmados.
+- Compilación y pruebas en móvil; errores controlados; mocks claramente identificados.
 
 ## 9. Dependencias y paralelismo
 
 ```text
-FASE 0: contratos, mocks, ramas, compilación
-   ├── F1: mapa/capas → filtros/selección → marcadores → selector ubicación
-   └── F2: Bottom Sheet → detalles → visor reportes → formulario
-                       ↓
-              Integración de eventos
-                       ↓
-           Integración de API backend
-                       ↓
-             Pruebas end-to-end
+FASE 0: contratos + mocks + ramas + build
+  ├─ F1: mapa y estados → filtros/selección → ubicación
+  └─ F2: Bottom Sheet → detalles/reportes confirmados → formulario
+                    ↓
+         Integración de callbacks
+                    ↓
+           Integración backend
+                    ↓
+          Pruebas end-to-end
 ```
 
-- Las fases 1–4 pueden ejecutarse en paralelo después de la fase 0.
-- F2 puede desarrollar Bottom Sheet y formulario con mocks sin esperar a MapLibre.
-- F1 puede desarrollar selección y coordenadas sin implementar tarjetas ni formulario.
-- Integrar en hitos pequeños: **mapa + panel**, **marcadores + detalle**, **selector + formulario**, **servicios + backend**.
-- No bloquear todo el trabajo por elevación o superficie si backend aún no las entrega.
+Las fases 1–4 pueden avanzar en paralelo tras Fase 0. Integrar pronto **mapa + panel**, luego **zona + reportes confirmados**, luego **selector + formulario**, finalmente **backend**. No bloquear UI por elevación o área si son datos opcionales.
 
 ## 10. Git y propiedad de archivos
 
-Ramas recomendadas:
+- `main`: estable; `develop`: integración; `feature/map`: F1; `feature/ui-reports`: F2.
+- Verificar ramas existentes y partir de una base compartida; no sobrescribir avances actuales.
+- PRs pequeños; sincronizar `develop`; ejecutar `npm run build` y lint/tests si existen.
 
-- `main`: versión estable.
-- `develop`: integración y pruebas.
-- `feature/map`: trabajo F1.
-- `feature/ui-reports`: trabajo F2.
+| Área                                                      | Responsable                     |
+| --------------------------------------------------------- | ------------------------------- |
+| `features/map/`, `features/risk-zones/`                   | F1                              |
+| `features/zone-details/`, `features/reports/`, `layouts/` | F2                              |
+| `app/App.tsx`                                             | Integración coordinada por F1   |
+| `types/`, `mocks/`, `components/ui/`, `lib/`, `hooks/`    | Compartido, cambios coordinados |
+| Dependencias, lockfile y configuración                    | Compartido, cambios coordinados |
 
-Crear ramas de funcionalidades desde el mismo commit de `develop` después de fase 0. Integrar mediante Pull Requests pequeños, revisar conflictos y ejecutar `npm run build` (y lint/tests si existen). Sincronizar con `develop` con frecuencia.
-
-| Área                                                   | Responsable                      |
-| ------------------------------------------------------ | -------------------------------- |
-| `features/map/`                                        | F1                               |
-| `features/risk-zones/`                                 | F1                               |
-| `features/zone-details/`                               | F2                               |
-| `features/reports/` (UI, formularios y servicios)      | F2                               |
-| `layouts/`                                             | F2                               |
-| `app/App.tsx`                                          | F1, **solo durante integración** |
-| `types/`, `mocks/`, `components/ui/`, `lib/`, `hooks/` | Compartido, cambios coordinados  |
-| `package.json`, lockfile, configuración de Vite/TS     | Cambios coordinados              |
-
-**Evitar conflictos:** no modificar carpetas ajenas; no redefinir tipos comunes; no crear un segundo mapa; no mezclar lógica de dominio del backend con la UI; acordar cambios compartidos antes de editarlos.
+No crear un segundo mapa, no duplicar contratos, no modificar archivos ajenos sin acuerdo, no inventar verificación frontend.
 
 ## 11. Checklist de aceptación del MVP
 
-- [ ] Zonas de riesgo visibles y distinguibles de zonas inundadas.
-- [ ] Riesgo histórico no confundido con inundación actual.
-- [ ] Estado confirmado/por confirmar/sin detección representado correctamente.
-- [ ] Tres filtros independientes funcionando.
-- [ ] Selección de zona o reporte abre información correcta.
-- [ ] Bottom Sheet compacto, resumen y expandido; gestos y cierre.
-- [ ] Información y reportes asociados disponibles; estados vacíos correctos.
-- [ ] Fotografías visibles y ampliables.
-- [ ] Formulario anónimo con ubicación, fotografía y nivel observado obligatorios.
-- [ ] Selector de ubicación preciso y retorno al formulario sin perder campos.
-- [ ] Cerrar formulario descarta datos; error de envío permite reintentar.
-- [ ] Confirmación de envío solo después de éxito del backend.
-- [ ] Reportes pendientes no confirman zonas inundadas.
-- [ ] Verificación automática real, si backend/API ofrece evidencia suficiente.
-- [ ] Datos de elevación/superficie opcionales sin valores inventados.
-- [ ] Nuevo reporte visible tras refresco/actualización.
+- [ ] Una zona tiene un solo estado visual público: amarillo (riesgo) o rojo (inundada).
+- [ ] La transición confirmada actualiza color, filtro y contenido del Bottom Sheet.
+- [ ] El rojo solo cubre geometría confirmada; no se extiende a un área por un punto aislado.
+- [ ] Dos filtros independientes, sin capa de reportes.
+- [ ] Polígonos ocultos no son seleccionables.
+- [ ] Bottom Sheet compacto/resumen/expandido, gestos y cierre.
+- [ ] Información de zona y reportes **confirmados** asociados.
+- [ ] Reportes pendientes y rechazados no se exponen públicamente.
+- [ ] Fotos visibles y ampliables; estados vacíos correctos.
+- [ ] Formulario anónimo con ubicación, foto y nivel observado obligatorios.
+- [ ] Selector de ubicación preciso; conserva datos al volver.
+- [ ] Cierre descarta borrador; error de envío permite reintentar.
+- [ ] Éxito de envío solo tras respuesta real y mensaje privado de verificación.
+- [ ] Un envío no crea marcador público ni cambia una zona automáticamente.
+- [ ] Backend determina clasificación, geometría y verificación.
+- [ ] Campos opcionales sin valores inventados; mocks identificados.
 - [ ] Pruebas en móvil y `npm run build` exitoso.
 
 ## 12. Riesgos y decisiones pendientes
 
-| Tema                                                         | Responsable            | Tratamiento mientras esté pendiente                                    |
-| ------------------------------------------------------------ | ---------------------- | ---------------------------------------------------------------------- |
-| API de niveles de agua: cobertura, precisión y actualización | Backend                | Mock explícito; no afirmar confirmación real.                          |
-| API de elevación y proximidad a ríos                         | Backend                | Campos opcionales; riesgo no determinado si faltan datos.              |
-| Criterios de clasificación de riesgo                         | Backend                | Visualizar valores recibidos; no calcular en frontend.                 |
-| Reglas y evidencia de rechazo de reportes                    | Backend                | Mantener pendiente cuando no hay evidencia suficiente.                 |
-| Endpoints y esquemas definitivos                             | Backend + coordinación | Contratos provisionales versionados y adaptadores.                     |
-| Almacenamiento de fotografías                                | Backend                | Vista previa local; subida real cuando exista endpoint.                |
-| Geometría de zonas inundadas                                 | Backend                | GeoJSON mock; no inferir polígonos reales.                             |
-| Asociación reporte-zona                                      | Backend                | Preparar UI por IDs; no suponer que todo reporte pertenece a una zona. |
-| Fecha y fuente de actualización                              | Backend                | Mostrar solo datos presentes.                                          |
+| Tema                                                 | Responsable     | Tratamiento temporal                                                                |
+| ---------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------- |
+| Fuente de niveles de agua, cobertura y actualización | Backend         | Mocks explícitos; no afirmar confirmación real.                                     |
+| Criterios de riesgo e inundación                     | Backend         | Mostrar estado recibido; no inferir en frontend.                                    |
+| Inundación parcial de un polígono                    | Backend         | Exigir geometría confirmada más precisa; no pintar zona completa sin evidencia.     |
+| Retorno de rojo a amarillo                           | Backend         | Solo tras confirmación del fin y riesgo persistente.                                |
+| Falta de datos / estado desconocido                  | Backend + ambos | No confundir con seguridad; definir tratamiento de zonas sin clasificación pública. |
+| Endpoints y esquema definitivos                      | Backend + ambos | Contratos provisionales versionados y adaptadores.                                  |
+| Almacenamiento y límites de fotos                    | Backend         | Vista previa local; validar contrato antes de envío real.                           |
+| Asociación reporte-zona                              | Backend         | Solo asociaciones confirmadas en consulta pública.                                  |
+| Frecuencia de refresco                               | Backend + F1    | Definir mecanismo; no prometer tiempo real sin soporte.                             |
+| Fuente y fecha de actualización                      | Backend         | Mostrar únicamente valores existentes.                                              |
 
 ## 13. Instrucciones operativas para OpenCode
 
-**Leer este archivo completo antes de implementar cualquier tarea.**
+**Leer este archivo completo antes de cualquier tarea.**
 
-1. **Inspecciona primero el repositorio** y reporta archivos relevantes, scripts, dependencias y estado actual. No asumas que existen rutas o componentes de este documento.
-2. **Trabaja únicamente en las tareas que el usuario indique por ID**, para el rol F1 o F2 correspondiente. No avances automáticamente a otras fases.
-3. Antes de codificar, resume: objetivo, archivos a crear/modificar, dependencias, contratos usados y criterios de aceptación.
-4. **Respeta la propiedad de carpetas.** Si una tarea exige cambiar `App.tsx`, tipos compartidos, configuración o archivos de otro rol, explica la necesidad y solicita autorización.
-5. Usa **TypeScript**, tipos estrictos y componentes pequeños; no dupliques lógica, contratos ni clientes HTTP.
-6. Mantén datos de ejemplo claramente identificados como **mocks**. No presentes zonas o inundaciones ficticias como información real.
-7. No inventes URLs de API, claves, credenciales, endpoints, contratos definitivos ni algoritmos geográficos. Deja adaptadores y TODOs documentados cuando backend no haya decidido.
-8. Distingue siempre **riesgo**, **inundación actual** y **verificación de reportes**.
-9. No marques un reporte como rechazado solo porque la API indique valores normales o no tenga cobertura.
-10. No implementes rutas alternativas, autenticación, simulación de lluvia ni funciones fuera del MVP.
-11. Conserva el comportamiento y los estilos existentes que ya funcionan; evita refactorizaciones masivas no solicitadas.
-12. Implementa estados de carga/error y validaciones cuando correspondan, aunque no existan pantallas Figma específicas.
-13. Al terminar cada tarea, ejecuta los scripts disponibles de validación, preferentemente `npm run build`, y reporta resultados reales.
-14. Entrega un resumen con archivos cambiados, comportamiento implementado, pruebas realizadas, bloqueos y **siguiente tarea sugerida**, sin ejecutarla.
-15. Nunca realices commits, pushes o merges sin que el usuario lo solicite expresamente.
+1. Inspecciona repo, dependencias, scripts, estructura y avances; no asumas rutas existentes.
+2. Implementa **solo los IDs solicitados** para F1/F2; no avances automáticamente.
+3. Antes de editar, indica objetivo, archivos, contratos, dependencias y aceptación.
+4. Respeta propiedad de carpetas; solicita acuerdo para modificar archivos compartidos o ajenos.
+5. TypeScript estricto, componentes pequeños, sin duplicar contratos/clientes HTTP.
+6. Los mocks deben estar marcados; no representar datos ficticios como reales.
+7. No inventar endpoints, claves, geometrías, reglas de verificación ni algoritmos de riesgo.
+8. Distinguir estado público de zona, nivel histórico de riesgo y estado interno del reporte.
+9. Nunca mostrar reportes pendientes/rechazados en UI pública ni crear marcadores de reportes.
+10. Solo el backend confirma cambios de estado; no cambiar una zona al enviar un reporte.
+11. No implementar rutas alternativas, autenticación, simulación o funcionalidades fuera del MVP.
+12. Preservar código funcional; evitar refactorizaciones masivas no solicitadas.
+13. Implementar carga/error y validar entradas cuando corresponda.
+14. Al finalizar, ejecutar scripts disponibles (preferir `npm run build`) y reportar resultados reales.
+15. Resumir archivos, comportamiento, pruebas, bloqueos y siguiente ID sugerido **sin ejecutarlo**.
+16. **No realizar commits, pushes ni merges sin petición expresa.**
 
-### Plantilla para pedir una tarea a OpenCode
+### Plantilla de tarea
 
 ```text
-Lee URBANGO_FLOOD_PLAN_DESARROLLO.md y revisa el estado actual del repositorio.
-Rol asignado: [Frontend 1 / Frontend 2].
+Lee URBANGO_FLOOD_PLAN_DESARROLLO_ACTUALIZADO.md y revisa el estado actual del repositorio.
+Rol: [Frontend 1 / Frontend 2].
 Fase: [número].
-Tarea(s): [IDs exactos, por ejemplo F1-02 y F1-04].
+Tareas: [IDs exactos].
 
-Implementa exclusivamente esas tareas y respeta los límites de propiedad
-establecidos en el plan. Antes de cambiar código, indica qué archivos
-modificarás y qué contratos utilizarás. No inventes endpoints ni datos reales.
-Al terminar, ejecuta las verificaciones disponibles y resume cambios,
-pruebas, bloqueos y el siguiente paso. No hagas commit ni push.
+Implementa exclusivamente esas tareas y respeta la propiedad de archivos.
+Antes de codificar, indica archivos y contratos que utilizarás.
+No inventes datos reales, endpoints ni verificaciones.
+Al terminar ejecuta las verificaciones disponibles, resume cambios,
+pruebas, bloqueos y siguiente paso. No hagas commit ni push.
 ```
 
-## 14. Orden de arranque recomendado
+## 14. Orden recomendado de arranque
 
-1. F1 inspecciona repositorio y prepara una propuesta de contratos (P0-01, P0-02).
-2. Ambos revisan contratos, callbacks y mocks (P0-02 a P0-05).
-3. F1 consolida cambios de fase 0 y prepara ramas (P0-06).
-4. Ambos verifican compilación (P0-07).
-5. F1 inicia F1-01/F1-02; F2 inicia F2-01/F2-02 **en paralelo**.
-6. Integrar temprano mapa + Bottom Sheet antes de acumular muchas funcionalidades.
+1. F1 inspecciona avances existentes (`P0-01`) y propone contratos (`P0-02`).
+2. Ambos acuerdan callbacks, mocks y propiedad de archivos (`P0-02` a `P0-05`).
+3. F1 verifica ramas/base compartida (`P0-06`); ambos compilan (`P0-07`).
+4. F1 retoma las tareas pendientes de `F1-01` a `F1-05` **sin repetir lo que ya funciona**.
+5. F2 inicia `F2-01` a `F2-03` en paralelo.
+6. Integrar mapa + Bottom Sheet temprano; después avanzar por fases.
 
 ---
 
-**Principio rector:** el mapa representa el territorio; los paneles presentan información; los reportes aportan observaciones ciudadanas; el backend valida y proporciona el estado. Las cuatro partes deben comunicarse mediante contratos explícitos y no invadir responsabilidades ajenas.
+**Principio rector:** el mapa muestra únicamente el estado público confirmado de las zonas; los paneles explican la zona y sus reportes confirmados; la ciudadanía aporta observaciones; el backend verifica y decide el estado geográfico. Los módulos se comunican mediante contratos explícitos.
