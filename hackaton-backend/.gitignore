@@ -1,0 +1,29 @@
+# Dependencias
+node_modules
+
+# Build
+dist
+*.tsbuildinfo
+
+# Cobertura
+coverage
+
+# Entorno (NUNCA subir .env)
+.env
+.env.*.local
+
+# Cliente Prisma generado
+src/generated
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Sistema
+.DS_Store
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea

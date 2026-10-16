@@ -1,64 +1,18 @@
 import type { RiskZoneCollection } from "../types/riskZone";
+import { adaptMapaResponse } from "../lib/mapaAdapter";
+import { MOCK_MAPA } from "./mockMapa";
 
 /**
  * ⚠️ ZONAS FICTICIAS SOLO PARA DESARROLLO.
- * No representan zonas reales de inundación ni información oficial, validada
- * o calculada. Sirven únicamente para comprobar la visualización de polígonos.
- * `status` simula el estado visual público que confirmará el backend:
- * `at_risk` (amarillo) es exclusivo de riesgo por huracán; `flooded` (rojo)
- * cubre inundación confirmada por huracán o por reportes ciudadanos. Deben
- * sustituirse por la respuesta GeoJSON del backend antes de cualquier demo.
  *
- * Orden de coordenadas GeoJSON: [longitud, latitud].
+ * Se derivan de `MOCK_MAPA` con el mismo adaptador que usará la respuesta real
+ * del backend (`adaptMapaResponse`), de modo que el mapa ya trabaje con la
+ * forma del contrato: cada zona de riesgo es un **punto de origen + una
+ * circunferencia** (`radioM`), no un polígono escrito a mano.
+ *
+ * No representan zonas reales de inundación ni información oficial, validada
+ * o calculada. Deben sustituirse por la respuesta del backend antes de
+ * cualquier demo.
  */
-export const MOCK_RISK_ZONES: RiskZoneCollection = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      properties: {
-        id: "rz-001",
-        name: "Centro histórico",
-        status: "at_risk",
-        riskLevel: "high",
-        description:
-          "Riesgo de inundación por huracán (zona de demostración).",
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [-108.475, 25.5745],
-            [-108.468, 25.5745],
-            [-108.468, 25.5695],
-            [-108.475, 25.5695],
-            [-108.475, 25.5745],
-          ],
-        ],
-      },
-    },
-    {
-      type: "Feature",
-      properties: {
-        id: "rz-002",
-        name: "Zona Poniente",
-        status: "flooded",
-        riskLevel: "high",
-        description:
-          "Inundación confirmada cerca del canal (zona de demostración).",
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [-108.488, 25.576],
-            [-108.48, 25.576],
-            [-108.48, 25.571],
-            [-108.488, 25.571],
-            [-108.488, 25.576],
-          ],
-        ],
-      },
-    },
-  ],
-};
+export const MOCK_RISK_ZONES: RiskZoneCollection =
+  adaptMapaResponse(MOCK_MAPA);

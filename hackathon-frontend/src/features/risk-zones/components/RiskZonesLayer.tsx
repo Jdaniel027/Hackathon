@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
+import type { FeatureCollection, Point } from "geojson";
 
 import type {
   RiskZoneCollection,
@@ -17,6 +18,14 @@ import RiskZonesFilters from "./RiskZonesFilters";
 const SOURCE_ID = "risk-zones";
 
 /**
+ * Fuente y capas del **punto de origen** de cada zona circular (contrato
+ * `ZonaRiesgoMapa`: `lat`/`lng` + `radioM`). Va en su propia fuente de puntos
+ * porque una capa `circle` de MapLibre dibuja un círculo por vértice del
+ * polígono, no en su centro.
+ */
+const ORIGIN_SOURCE_ID = "risk-zones-origins";
+
+/**
  * Una capa (relleno y borde) por cada estado, para poder alternar cada filtro
  * de forma independiente: Huracán (`at_risk`) e Inundadas (`flooded`).
  */
@@ -29,6 +38,36 @@ const LINE_LAYER_IDS: Record<ZoneStatus, string> = {
   at_risk: "risk-zones-at-risk-line",
   flooded: "risk-zones-flooded-line",
 };
+
+/** Punto en el origen de cada zona circular, uno por estado. */
+const ORIGIN_LAYER_IDS: Record<ZoneStatus, string> = {
+  at_risk: "risk-zones-at-risk-origin",
+  flooded: "risk-zones-flooded-origin",
+};
+
+/**
+ * Proyecta las zonas con `origin` a una colección de puntos para dibujar el
+ * punto de origen. Solo existe una feature de origen por zona.
+ */
+function toOriginPoints(
+  data: RiskZoneCollection,
+): FeatureCollection<Point, { status: ZoneStatus }> {
+  const features = data.features
+    .filter((feature) => feature.properties.origin)
+    .map((feature) => ({
+      type: "Feature" as const,
+      geometry: {
+        type: "Point" as const,
+        coordinates: [
+          feature.properties.origin!.lng,
+          feature.properties.origin!.lat,
+        ],
+      },
+      properties: { status: feature.properties.status },
+    }));
+
+  return { type: "FeatureCollection", features };
+}
 
 /** Validación mínima para no registrar datos GeoJSON inválidos. */
 function isValidCollection(
@@ -44,6 +83,12 @@ function isValidCollection(
 interface RiskZonesLayerProps {
   map: Map | null;
   data: RiskZoneCollection;
+  /** Hay una petición de datos en curso. */
+  loading: boolean;
+  /** Error de la última carga, o `null`. */
+  error: string | null;
+  /** Los datos en pantalla son de demostración (el backend no respondió). */
+  demo: boolean;
   statusVisibility: StatusVisibility;
   onToggleStatus: (status: ZoneStatus) => void;
   onSelectZone: (zone: RiskZoneProperties, lngLat: [number, number]) => void;
@@ -59,6 +104,9 @@ interface RiskZonesLayerProps {
 export default function RiskZonesLayer({
   map,
   data,
+  loading,
+  error,
+  demo,
   statusVisibility,
   onToggleStatus,
   onSelectZone,
@@ -87,6 +135,17 @@ export default function RiskZonesLayer({
         source.setData(data);
       } else {
         map.addSource(SOURCE_ID, { type: "geojson", data });
+      }
+
+      // Punto de origen de las zonas circulares (mismo dato, otra fuente).
+      const origins = toOriginPoints(data);
+      const originSource = map.getSource(ORIGIN_SOURCE_ID) as
+        | GeoJSONSource
+        | undefined;
+      if (originSource) {
+        originSource.setData(origins);
+      } else {
+        map.addSource(ORIGIN_SOURCE_ID, { type: "geojson", data: origins });
       }
 
       for (const status of ZONE_STATUSES) {
@@ -125,6 +184,31 @@ export default function RiskZonesLayer({
           });
         }
       }
+
+      // Los puntos de origen se añaden al final para quedar por encima de los
+      // rellenos y bordes de todos los estados.
+      for (const status of ZONE_STATUSES) {
+        const visibility = statusVisibilityRef.current[status]
+          ? "visible"
+          : "none";
+        const originId = ORIGIN_LAYER_IDS[status];
+
+        if (!map.getLayer(originId)) {
+          map.addLayer({
+            id: originId,
+            type: "circle",
+            source: ORIGIN_SOURCE_ID,
+            filter: ["==", ["get", "status"], status],
+            layout: { visibility },
+            paint: {
+              "circle-radius": 4,
+              "circle-color": STATUS_BORDER_COLORS[status],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#ffffff",
+            },
+          });
+        }
+      }
     };
 
     if (map.isStyleLoaded()) {
@@ -149,6 +233,9 @@ export default function RiskZonesLayer({
       }
       if (map.getLayer(LINE_LAYER_IDS[status])) {
         map.setLayoutProperty(LINE_LAYER_IDS[status], "visibility", value);
+      }
+      if (map.getLayer(ORIGIN_LAYER_IDS[status])) {
+        map.setLayoutProperty(ORIGIN_LAYER_IDS[status], "visibility", value);
       }
     }
   }, [map, statusVisibility]);
@@ -201,6 +288,9 @@ export default function RiskZonesLayer({
 
     return () => {
       for (const status of ZONE_STATUSES) {
+        if (map.getLayer(ORIGIN_LAYER_IDS[status])) {
+          map.removeLayer(ORIGIN_LAYER_IDS[status]);
+        }
         if (map.getLayer(LINE_LAYER_IDS[status])) {
           map.removeLayer(LINE_LAYER_IDS[status]);
         }
@@ -208,6 +298,7 @@ export default function RiskZonesLayer({
           map.removeLayer(FILL_LAYER_IDS[status]);
         }
       }
+      if (map.getSource(ORIGIN_SOURCE_ID)) map.removeSource(ORIGIN_SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
     };
   }, [map]);
@@ -218,7 +309,26 @@ export default function RiskZonesLayer({
         <RiskZonesFilters
           statusVisibility={statusVisibility}
           onToggleStatus={onToggleStatus}
+          demo={demo}
         />
+      )}
+
+      {loading && (
+        <p
+          role="status"
+          className="pointer-events-auto rounded-md bg-white/95 p-2 text-[10px] leading-tight text-slate-500 shadow ring-1 ring-slate-200"
+        >
+          Cargando zonas…
+        </p>
+      )}
+
+      {!loading && demo && (
+        <p
+          role="status"
+          className="pointer-events-auto max-w-44 rounded-md bg-amber-50/95 p-2 text-[10px] leading-tight text-amber-800 shadow ring-1 ring-amber-200"
+        >
+          {error ?? "Datos de demostración."}
+        </p>
       )}
 
       {!hasValidData && (

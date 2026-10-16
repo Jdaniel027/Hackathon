@@ -6,6 +6,7 @@ import MapStatusOverlay from "./MapStatusOverlay";
 import { useMapInstance } from "../hooks/useMapInstance";
 import { useUserLocation } from "../hooks/useUserLocation";
 import { useUserLocationMarker } from "../hooks/useUserLocationMarker";
+import { MAP_CONFIG } from "../config/map.config";
 import RiskZonesLayer from "../../risk-zones/components/RiskZonesLayer";
 import StatusTransitionDemo from "../../risk-zones/components/StatusTransitionDemo";
 import { hasVisibleStatus } from "../../risk-zones/lib/zoneFilters";
@@ -25,7 +26,8 @@ import type {
  */
 export default function MapView() {
   const { containerRef, map, ready, error } = useMapInstance();
-  const { zones, transitionFirstZone } = useRiskZones();
+  const { zones, loading, error: zonesError, source, transitionFirstZone } =
+    useRiskZones(MAP_CONFIG.municipioSlug);
   const { statusVisibility, toggleStatus } = useZoneFilters();
   const { status: locationStatus, coordinates, locate } = useUserLocation();
 
@@ -87,10 +89,14 @@ export default function MapView() {
 
       <MapStatusOverlay ready={ready} error={error} />
 
-      {/* Fuente de datos separada de la representación: los mocks se reemplazarán por el backend. */}
+      {/* Fuente de datos separada de la representación (F1-20): la API real con
+          respaldo en datos de demostración si el backend no responde. */}
       <RiskZonesLayer
         map={map}
         data={zones}
+        loading={loading}
+        error={zonesError}
+        demo={source === "mock"}
         statusVisibility={statusVisibility}
         onToggleStatus={handleToggleStatus}
         onSelectZone={handleSelectZone}

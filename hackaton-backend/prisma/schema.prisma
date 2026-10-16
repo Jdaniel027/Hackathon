@@ -1,0 +1,159 @@
+// Esquema Prisma — AquaReport Backend
+// Fuente de verdad: docs/IDEA.md §2 y docs/ARCHITECTURE.md.
+// Sin usuarios, sin schema `usuario`: la API es anónima (admin por x-api-key).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// En Prisma 7 la URL de conexión vive en `prisma.config.ts` (CLI/migraciones) y en el
+// driver adapter (aplicación). Aquí solo se declara el proveedor.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ─────────────────────────────────────────────
+
+enum EstadoZona {
+  SIN_DATOS
+  NORMAL
+  PRECAUCION
+  INUNDADO
+}
+
+enum MotivoRiesgo {
+  ALTURA
+  INUNDACION
+}
+
+enum OrigenRiesgo {
+  MANUAL
+  CICLON
+  CLIMA
+}
+
+enum FuenteClima {
+  CONAGUA
+  OPEN_METEO
+}
+
+enum TipoReporte {
+  CORROBORADO
+  PENDIENTE
+  NO_CORROBORADO
+}
+
+enum ClasificacionIA {
+  INUNDADO
+  PARCIAL
+  NO_INUNDADO
+}
+
+enum FuenteReporte {
+  CIUDADANO
+  CICLON
+}
+
+// ─── Ubicación ─────────────────────────────────────────
+
+model Pais {
+  id      Int      @id @default(autoincrement())
+  nombre  String   @unique @db.VarChar(120)
+  estados Estado[]
+}
+
+model Estado {
+  id         Int         @id @default(autoincrement())
+  nombre     String      @db.VarChar(120)
+  paisId     Int
+  pais       Pais        @relation(fields: [paisId], references: [id])
+  municipios Municipio[]
+
+  @@unique([paisId, nombre])
+}
+
+model Municipio {
+  id          Int          @id @default(autoincrement())
+  nombre      String       @db.VarChar(120)
+  slug        String       @unique @db.VarChar(120)
+  // "ides" del web service de Conagua/SMN (PENDIENTE DE VALIDACIÓN al seedear)
+  idEstadoSmn Int?
+  // "idmun" del web service de Conagua/SMN (PENDIENTE DE VALIDACIÓN al seedear)
+  idMunSmn    Int?
+  estadoId    Int
+  estado      Estado       @relation(fields: [estadoId], references: [id])
+  zonas       Zona[]
+  riesgos     ZonaRiesgo[]
+
+  @@unique([estadoId, nombre])
+}
+
+// ─── Zonas y clima ─────────────────────────────────────
+
+model Zona {
+  id            Int            @id @default(autoincrement())
+  municipioId   Int
+  municipio     Municipio      @relation(fields: [municipioId], references: [id])
+  latCentro     Float
+  lngCentro     Float
+  ladoM         Int            @default(9000)
+  modelo        String         @default("ecmwf_ifs") @db.VarChar(60)
+  latModelo     Float?
+  lngModelo     Float?
+  estado        EstadoZona     @default(SIN_DATOS)
+  mm1h          Float          @default(0)
+  mm24h         Float          @default(0)
+  creadoEn      DateTime       @default(now())
+  actualizadoEn DateTime       @updatedAt
+  lecturas      LecturaClima[]
+  reportes      Reporte[]
+
+  @@unique([latCentro, lngCentro, modelo])
+  @@index([municipioId])
+}
+
+model LecturaClima {
+  id       Int         @id @default(autoincrement())
+  zonaId   Int
+  zona     Zona        @relation(fields: [zonaId], references: [id])
+  mm1h     Float
+  mm24h    Float
+  fuente   FuenteClima
+  creadoEn DateTime    @default(now())
+
+  @@index([zonaId, creadoEn])
+}
+
+model ZonaRiesgo {
+  id          Int          @id @default(autoincrement())
+  municipioId Int
+  municipio   Municipio    @relation(fields: [municipioId], references: [id])
+  lat         Float
+  lng         Float
+  radioM      Int
+  motivo      MotivoRiesgo
+  origen      OrigenRiesgo
+  activa      Boolean      @default(true)
+  creadoEn    DateTime     @default(now())
+  venceEn     DateTime?
+
+  @@index([municipioId, activa])
+}
+
+// ─── Reportes ──────────────────────────────────────────
+
+model Reporte {
+  id            Int              @id @default(autoincrement())
+  zonaId        Int
+  zona          Zona             @relation(fields: [zonaId], references: [id])
+  fuente        FuenteReporte    @default(CIUDADANO)
+  tipo          TipoReporte      @default(PENDIENTE)
+  clasificacion ClasificacionIA?
+  userLat       Float?
+  userLng       Float?
+  fechaFoto     DateTime?
+  creadoEn      DateTime         @default(now())
+
+  @@index([zonaId, creadoEn])
+}

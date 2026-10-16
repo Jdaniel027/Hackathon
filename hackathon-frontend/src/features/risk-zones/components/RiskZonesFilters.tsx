@@ -14,7 +14,7 @@ interface RiskZonesFiltersProps {
   statusVisibility: StatusVisibility;
   onToggleStatus: (status: ZoneStatus) => void;
 }
-
+2;
 /**
  * Menú de filtros en forma de botón desplegable (F1-06). Colapsado muestra
  * solo el botón «Filtros»; al pulsarlo despliega las dos opciones

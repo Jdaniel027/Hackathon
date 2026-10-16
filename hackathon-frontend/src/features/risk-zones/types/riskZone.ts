@@ -14,6 +14,12 @@ export type ZoneStatus = "at_risk" | "flooded";
  */
 export type RiskLevel = "low" | "medium" | "high" | "unknown";
 
+/** Punto de origen de una zona de riesgo circular (contrato backend). */
+export interface RiskZoneOrigin {
+  lat: number;
+  lng: number;
+}
+
 /** Propiedades asociadas a cada zona. */
 export interface RiskZoneProperties {
   id: string;
@@ -23,6 +29,14 @@ export interface RiskZoneProperties {
   /** Nivel de riesgo histórico (opcional, contexto). */
   riskLevel?: RiskLevel;
   description?: string;
+  /**
+   * Centro de la zona de riesgo circular. Proviene de `ZonaRiesgoMapa.lat/lng`
+   * (el punto de origen del reporte/evidencia). Se usa para pintar el punto de
+   * origen; la geometría dibujada es la circunferencia aproximada.
+   */
+  origin?: RiskZoneOrigin;
+  /** Radio en metros de la zona circular (`ZonaRiesgoMapa.radioM`). */
+  radiusM?: number;
 }
 
 export type RiskZoneGeometry = Polygon | MultiPolygon;

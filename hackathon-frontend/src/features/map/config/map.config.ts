@@ -4,4 +4,6 @@ export const MAP_CONFIG = {
   zoom: 12,
   minZoom: 5,
   maxZoom: 19,
+  /** Municipio por defecto para `GET /api/v1/mapa/:municipioSlug` (demo: Mazatlán). */
+  municipioSlug: "mazatlan",
 };

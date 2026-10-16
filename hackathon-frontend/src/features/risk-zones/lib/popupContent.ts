@@ -26,18 +26,20 @@ export function createRiskZonePopupContent(zone: RiskZoneProperties): HTMLElemen
     container.append(level);
   }
 
+  // Zona circular: punto de origen + radio (contrato `ZonaRiesgoMapa`).
+  if (zone.origin && typeof zone.radiusM === "number") {
+    const radius = document.createElement("p");
+    radius.className = "text-xs text-slate-500";
+    radius.textContent = `Origen: ${zone.origin.lat.toFixed(5)}, ${zone.origin.lng.toFixed(5)} · Radio: ${zone.radiusM} m`;
+    container.append(radius);
+  }
+
   if (zone.description) {
     const description = document.createElement("p");
     description.className = "text-xs text-slate-500";
     description.textContent = zone.description;
     container.append(description);
   }
-
-  const disclaimer = document.createElement("p");
-  disclaimer.className = "text-[10px] leading-tight text-slate-400";
-  disclaimer.textContent =
-    "Zona de demostración — no representa estado verificado.";
-  container.append(disclaimer);
 
   return container;
 }
