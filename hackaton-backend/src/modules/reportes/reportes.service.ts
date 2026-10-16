@@ -8,14 +8,18 @@ import type { CrearReporteDto } from './dto/crear-reporte.dto.js';
 import type { ListarReportesQueryDto } from './dto/listar-reportes-query.dto.js';
 import type {
   ListarReportesResponse,
-  ReporteApi,
   ReporteCreadoResponse,
-  ClasificacionIAApi,
   FuenteReporteApi,
   TipoReporteApi,
 } from './reportes.types.js';
+import exifr from 'exifr';
+import {
+  clasificacionBdAFoto,
+  clasificacionFotoABd,
+} from './utils/clasificacion-bd.util.js';
 
 const MAX_REPORTES = 200;
+const MAX_ANTIGUEDAD_FOTO_MS = 30 * 60 * 1000; // 30 minutos
 
 @Injectable()
 export class ReportesService {
@@ -26,6 +30,28 @@ export class ReportesService {
     private readonly zonas: ZonasService,
     private readonly gemini: GeminiService,
   ) {}
+
+  private async extraerFechaFoto(buffer: Buffer): Promise<Date | null> {
+    try {
+      const meta = await exifr.parse(buffer, { pick: ['DateTimeOriginal'] });
+      const fechaExif = meta?.DateTimeOriginal;
+      if (fechaExif instanceof Date && !isNaN(fechaExif.getTime())) {
+        return fechaExif;
+      }
+    } catch (error) {
+      this.logger.warn('No se pudo leer EXIF de la foto', error);
+    }
+    return null;
+  }
+
+  private validarAntiguedadFoto(fechaFoto: Date | null): void {
+    const ahora = new Date();
+    const referencia = fechaFoto ?? ahora;
+    const diffMs = ahora.getTime() - referencia.getTime();
+    if (diffMs > MAX_ANTIGUEDAD_FOTO_MS) {
+      throw APP_ERRORS.REPORT_FECHA_INVALIDA();
+    }
+  }
 
   async crear(
     foto: Express.Multer.File | undefined,
@@ -40,8 +66,10 @@ export class ReportesService {
       throw APP_ERRORS.REPORT_FUERA_DE_ZONA();
     }
 
-    // TODO(DEVELOPER_V): leer EXIF (fecha/orientación) con `exifr` y rechazar fotos
-    // con más de 30 minutos de antigüedad (APP_ERRORS.REPORT_FECHA_INVALIDA).
+    // Leer EXIF (fecha/orientación) y validar antigüedad ≤ 30 min
+    const fechaFoto = await this.extraerFechaFoto(foto.buffer);
+    this.validarAntiguedadFoto(fechaFoto);
+
     const clasificacion = await this.gemini.clasificarFoto(foto.buffer, foto.mimetype);
 
     const reporte = await this.prisma.reporte.create({
@@ -49,9 +77,10 @@ export class ReportesService {
         zonaId: zona.id,
         fuente: 'CIUDADANO',
         tipo: 'PENDIENTE',
-        clasificacion,
+        clasificacion: clasificacionFotoABd(clasificacion),
         userLat: dto.lat,
         userLng: dto.lng,
+        fechaFoto,
       },
     });
 
@@ -63,7 +92,7 @@ export class ReportesService {
       id: reporte.id,
       zonaId: reporte.zonaId,
       tipo: reporte.tipo as TipoReporteApi,
-      clasificacion: reporte.clasificacion as ClasificacionIAApi | null,
+      clasificacion,
     };
   }
 
@@ -83,7 +112,9 @@ export class ReportesService {
         zonaId: reporte.zonaId,
         fuente: reporte.fuente as FuenteReporteApi,
         tipo: reporte.tipo as TipoReporteApi,
-        clasificacion: reporte.clasificacion as ClasificacionIAApi | null,
+        clasificacion: reporte.clasificacion
+          ? clasificacionBdAFoto(reporte.clasificacion)
+          : null,
         userLat: reporte.userLat,
         userLng: reporte.userLng,
         fechaFoto: reporte.fechaFoto ? reporte.fechaFoto.toISOString() : null,
