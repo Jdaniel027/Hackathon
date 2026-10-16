@@ -442,42 +442,43 @@ export class CronsService implements OnApplicationBootstrap {
       },
     });
 
+    // Un reporte se representa con un solo círculo centrado en el usuario.
+    // El radio cubre la extensión de las celdas bajas conectadas, no toda la celda de 9 km.
+    const radioEstimado = Math.max(
+      RADIO_RIESGO_INUNDACION_M,
+      Math.ceil(
+        Math.max(
+          ...puntos.map((punto) =>
+            this.distanciaM(lat, lng, punto.latCentro, punto.lngCentro),
+          ),
+        ) + RADIO_RIESGO_INUNDACION_M,
+      ),
+    );
+    const existente = activos.find(
+      (riesgo) =>
+        this.distanciaM(lat, lng, riesgo.lat, riesgo.lng) <= riesgo.radioM,
+    );
     let creados = 0;
     let renovados = 0;
-    const renovadosIds = new Set<number>();
-    for (const punto of puntos) {
-      const existente = activos.find(
-        (riesgo) =>
-          this.distanciaM(
-            punto.latCentro,
-            punto.lngCentro,
-            riesgo.lat,
-            riesgo.lng,
-          ) <= riesgo.radioM,
-      );
-      if (existente) {
-        if (!renovadosIds.has(existente.id)) {
-          await this.prisma.zonaRiesgo.update({
-            where: { id: existente.id },
-            data: { venceEn },
-          });
-          renovadosIds.add(existente.id);
-          renovados += 1;
-        }
-        continue;
-      }
+    if (existente) {
+      await this.prisma.zonaRiesgo.update({
+        where: { id: existente.id },
+        data: { lat, lng, radioM: radioEstimado, venceEn },
+      });
+      renovados = 1;
+    } else {
       await this.prisma.zonaRiesgo.create({
         data: {
           municipioId: reporte.zona.municipioId,
-          lat: punto.latCentro,
-          lng: punto.lngCentro,
-          radioM: RADIO_RIESGO_INUNDACION_M,
+          lat,
+          lng,
+          radioM: radioEstimado,
           motivo: 'INUNDACION',
           origen: 'CLIMA',
           venceEn,
         },
       });
-      creados += 1;
+      creados = 1;
     }
     return { creados, renovados };
   }

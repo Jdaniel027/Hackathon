@@ -162,9 +162,10 @@ Respuesta `200`:
 **Errores**: `404 MUNICIPIO_NO_ENCONTRADO`.
 
 > Frontend: dibujar zonas con `L.rectangle(limites(z))` y riesgos con `L.circle`.
-> Un reporte corroborado puede generar varios círculos `INUNDACION` / `CLIMA`
-> (radio 500 m, vigencia 3 días): representan **celdas bajas conectadas de área
-> potencial**, no un contorno medido de agua. Se muestrea una malla de 1 km
+> Un reporte corroborado genera un solo círculo `INUNDACION` / `CLIMA`
+> centrado en las coordenadas del reporte. Su radio, mínimo 500 m y vigencia
+> 3 días, representa la extensión aproximada de las **celdas bajas conectadas**;
+> no es un contorno medido de agua. Se muestrea una malla de 1 km
 > (hasta 25 celdas, 2 km desde el reporte), reteniendo solo vecinos por lado
 > con elevación no mayor a la del punto reportado + 1.5 m. Es una heurística
 > con incertidumbre del DEM, no un cálculo hidrológico. La elevación se calcula en el cron

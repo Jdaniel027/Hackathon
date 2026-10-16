@@ -494,7 +494,7 @@ describe('CronsService', () => {
       expect(datosUpdate(m.reporteUpdate).tipo).toBe('CORROBORADO');
       expect(datosUpdate(m.riesgoCreate)).toMatchObject({
         municipioId: 1,
-        radioM: 500,
+        radioM: expect.any(Number) as unknown as number,
         motivo: 'INUNDACION',
         origen: 'CLIMA',
         venceEn: expect.any(Date) as unknown as Date,
@@ -520,7 +520,7 @@ describe('CronsService', () => {
       expect(datosUpdate(m.reporteUpdate).tipo).toBe('CORROBORADO');
     });
 
-    it('estima celdas bajas para un reporte corroborado y persiste varios círculos', async () => {
+    it('estima celdas bajas y persiste un solo círculo centrado en el reporte', async () => {
       m.reporteFindMany.mockResolvedValue([
         reporte(
           {},
@@ -536,10 +536,17 @@ describe('CronsService', () => {
 
       expect(m.getElevaciones).toHaveBeenCalledOnce();
       expect(m.getElevaciones.mock.calls[0][0]).toHaveLength(25);
-      expect(m.riesgoCreate).toHaveBeenCalledTimes(25);
+      expect(m.riesgoCreate).toHaveBeenCalledTimes(1);
+      expect(m.riesgoCreate.mock.calls[0][0].data).toMatchObject({
+        lat: 23.2494,
+        lng: -106.4111,
+        radioM: expect.any(Number),
+        motivo: 'INUNDACION',
+        origen: 'CLIMA',
+      });
       expect(resultado.detalle).toMatchObject({
         corroborados: 1,
-        riesgosCreados: 25,
+        riesgosCreados: 1,
       });
     });
 
