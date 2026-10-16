@@ -1,17 +1,34 @@
 import { useEffect, useRef } from "react";
 import type { GeoJSONSource, Map, MapLayerMouseEvent } from "maplibre-gl";
 
-import type { RiskZoneCollection, RiskZoneProperties } from "../types/riskZone";
+import type {
+  RiskZoneCollection,
+  RiskZoneProperties,
+  ZoneStatus,
+} from "../types/riskZone";
 import {
   STATUS_BORDER_COLORS,
   STATUS_FILL_COLORS,
-  STATUS_LABELS,
   ZONE_STATUSES,
 } from "../lib/riskZoneStyles";
+import type { StatusVisibility } from "../lib/zoneFilters";
+import RiskZonesFilters from "./RiskZonesFilters";
 
 const SOURCE_ID = "risk-zones";
-const FILL_LAYER_ID = "risk-zones-fill";
-const LINE_LAYER_ID = "risk-zones-line";
+
+/**
+ * Una capa (relleno y borde) por cada estado, para poder alternar cada filtro
+ * de forma independiente: Huracán (`at_risk`) e Inundadas (`flooded`).
+ */
+const FILL_LAYER_IDS: Record<ZoneStatus, string> = {
+  at_risk: "risk-zones-at-risk-fill",
+  flooded: "risk-zones-flooded-fill",
+};
+
+const LINE_LAYER_IDS: Record<ZoneStatus, string> = {
+  at_risk: "risk-zones-at-risk-line",
+  flooded: "risk-zones-flooded-line",
+};
 
 /** Validación mínima para no registrar datos GeoJSON inválidos. */
 function isValidCollection(
@@ -27,30 +44,31 @@ function isValidCollection(
 interface RiskZonesLayerProps {
   map: Map | null;
   data: RiskZoneCollection;
-  visible: boolean;
-  onToggleVisibility: () => void;
+  statusVisibility: StatusVisibility;
+  onToggleStatus: (status: ZoneStatus) => void;
   onSelectZone: (zone: RiskZoneProperties, lngLat: [number, number]) => void;
 }
 
 /**
- * Capa GeoJSON de zonas de riesgo. La visibilidad es controlada por el padre
- * para que este pueda limpiar la selección cuando las zonas se ocultan.
+ * Capa GeoJSON de zonas de riesgo. Cada estado vive en su propia capa y su
+ * visibilidad la controla el padre mediante los dos filtros independientes.
+ * Un grupo oculto deja de renderizarse y, por tanto, tampoco es seleccionable.
  * La detección de la selección se notifica hacia arriba; la presentación vive
  * en `MapSelectionPopup`.
  */
 export default function RiskZonesLayer({
   map,
   data,
-  visible,
-  onToggleVisibility,
+  statusVisibility,
+  onToggleStatus,
   onSelectZone,
 }: RiskZonesLayerProps) {
-  const visibleRef = useRef(visible);
+  const statusVisibilityRef = useRef(statusVisibility);
   const onSelectRef = useRef(onSelectZone);
 
   useEffect(() => {
-    visibleRef.current = visible;
-  }, [visible]);
+    statusVisibilityRef.current = statusVisibility;
+  }, [statusVisibility]);
 
   useEffect(() => {
     onSelectRef.current = onSelectZone;
@@ -71,47 +89,41 @@ export default function RiskZonesLayer({
         map.addSource(SOURCE_ID, { type: "geojson", data });
       }
 
-      const visibility = visibleRef.current ? "visible" : "none";
+      for (const status of ZONE_STATUSES) {
+        const visibility = statusVisibilityRef.current[status]
+          ? "visible"
+          : "none";
+        const fillId = FILL_LAYER_IDS[status];
+        const lineId = LINE_LAYER_IDS[status];
 
-      if (!map.getLayer(FILL_LAYER_ID)) {
-        map.addLayer({
-          id: FILL_LAYER_ID,
-          type: "fill",
-          source: SOURCE_ID,
-          layout: { visibility },
-          paint: {
-            // El color depende del estado visual público. Fallback a `at_risk`
-            // (amarillo) para no pintar de rojo sin confirmación del backend.
-            "fill-color": [
-              "match",
-              ["get", "status"],
-              "flooded",
-              STATUS_FILL_COLORS.flooded,
-              STATUS_FILL_COLORS.at_risk,
-            ],
-            "fill-opacity": 0.35,
-          },
-        });
-      }
+        if (!map.getLayer(fillId)) {
+          map.addLayer({
+            id: fillId,
+            type: "fill",
+            source: SOURCE_ID,
+            filter: ["==", ["get", "status"], status],
+            layout: { visibility },
+            paint: {
+              "fill-color": STATUS_FILL_COLORS[status],
+              "fill-opacity": 0.35,
+            },
+          });
+        }
 
-      if (!map.getLayer(LINE_LAYER_ID)) {
-        map.addLayer({
-          id: LINE_LAYER_ID,
-          type: "line",
-          source: SOURCE_ID,
-          layout: { visibility },
-          paint: {
-            "line-color": [
-              "match",
-              ["get", "status"],
-              "flooded",
-              STATUS_BORDER_COLORS.flooded,
-              STATUS_BORDER_COLORS.at_risk,
-            ],
-            "line-width": 1.5,
-            "line-opacity": 0.9,
-          },
-        });
+        if (!map.getLayer(lineId)) {
+          map.addLayer({
+            id: lineId,
+            type: "line",
+            source: SOURCE_ID,
+            filter: ["==", ["get", "status"], status],
+            layout: { visibility },
+            paint: {
+              "line-color": STATUS_BORDER_COLORS[status],
+              "line-width": 1.5,
+              "line-opacity": 0.9,
+            },
+          });
+        }
       }
     };
 
@@ -126,26 +138,29 @@ export default function RiskZonesLayer({
     };
   }, [map, data, hasValidData]);
 
-  // Alterna la visibilidad de las capas sin recrearlas.
+  // Alterna cada filtro sin recrear las capas ni duplicar polígonos.
   useEffect(() => {
     if (!map) return;
 
-    const value = visible ? "visible" : "none";
-    if (map.getLayer(FILL_LAYER_ID)) {
-      map.setLayoutProperty(FILL_LAYER_ID, "visibility", value);
+    for (const status of ZONE_STATUSES) {
+      const value = statusVisibility[status] ? "visible" : "none";
+      if (map.getLayer(FILL_LAYER_IDS[status])) {
+        map.setLayoutProperty(FILL_LAYER_IDS[status], "visibility", value);
+      }
+      if (map.getLayer(LINE_LAYER_IDS[status])) {
+        map.setLayoutProperty(LINE_LAYER_IDS[status], "visibility", value);
+      }
     }
-    if (map.getLayer(LINE_LAYER_ID)) {
-      map.setLayoutProperty(LINE_LAYER_ID, "visibility", value);
-    }
-  }, [map, visible]);
+  }, [map, statusVisibility]);
 
-  // Detección de selección: popup delegado al padre. Las capas ocultas no
-  // generan features, así que tampoco son seleccionables; la guarda lo refuerza.
+  // Detección de selección: popup delegado al padre. Las capas ocultas por su
+  // filtro no generan features, así que tampoco son seleccionables.
   useEffect(() => {
     if (!map || !hasValidData) return;
 
+    const fillLayerIds = ZONE_STATUSES.map((status) => FILL_LAYER_IDS[status]);
+
     const handleClick = (event: MapLayerMouseEvent) => {
-      if (!visibleRef.current) return;
       const feature = event.features?.[0];
       if (!feature?.properties) return;
 
@@ -159,21 +174,24 @@ export default function RiskZonesLayer({
     };
 
     const handleMouseEnter = () => {
-      if (!visibleRef.current) return;
       map.getCanvas().style.cursor = "pointer";
     };
     const handleMouseLeave = () => {
       map.getCanvas().style.cursor = "";
     };
 
-    map.on("click", FILL_LAYER_ID, handleClick);
-    map.on("mouseenter", FILL_LAYER_ID, handleMouseEnter);
-    map.on("mouseleave", FILL_LAYER_ID, handleMouseLeave);
+    for (const id of fillLayerIds) {
+      map.on("click", id, handleClick);
+      map.on("mouseenter", id, handleMouseEnter);
+      map.on("mouseleave", id, handleMouseLeave);
+    }
 
     return () => {
-      map.off("click", FILL_LAYER_ID, handleClick);
-      map.off("mouseenter", FILL_LAYER_ID, handleMouseEnter);
-      map.off("mouseleave", FILL_LAYER_ID, handleMouseLeave);
+      for (const id of fillLayerIds) {
+        map.off("click", id, handleClick);
+        map.off("mouseenter", id, handleMouseEnter);
+        map.off("mouseleave", id, handleMouseLeave);
+      }
     };
   }, [map, hasValidData]);
 
@@ -182,8 +200,14 @@ export default function RiskZonesLayer({
     if (!map) return;
 
     return () => {
-      if (map.getLayer(LINE_LAYER_ID)) map.removeLayer(LINE_LAYER_ID);
-      if (map.getLayer(FILL_LAYER_ID)) map.removeLayer(FILL_LAYER_ID);
+      for (const status of ZONE_STATUSES) {
+        if (map.getLayer(LINE_LAYER_IDS[status])) {
+          map.removeLayer(LINE_LAYER_IDS[status]);
+        }
+        if (map.getLayer(FILL_LAYER_IDS[status])) {
+          map.removeLayer(FILL_LAYER_IDS[status]);
+        }
+      }
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
     };
   }, [map]);
@@ -191,33 +215,10 @@ export default function RiskZonesLayer({
   return (
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-start gap-2">
       {hasValidData && !isEmpty && (
-        <button
-          type="button"
-          onClick={onToggleVisibility}
-          aria-pressed={visible}
-          className="pointer-events-auto inline-flex min-h-11 items-center rounded-md bg-white/95 px-3 text-xs font-medium text-slate-700 shadow ring-1 ring-slate-200 transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          {visible ? "Ocultar zonas" : "Mostrar zonas"}
-        </button>
-      )}
-
-      {hasValidData && !isEmpty && visible && (
-        <div className="pointer-events-auto rounded-md bg-white/95 p-2 shadow ring-1 ring-slate-200">
-          <ul className="space-y-1 text-[11px] text-slate-600">
-            {ZONE_STATUSES.map((status) => (
-              <li key={status} className="flex items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 rounded-sm"
-                  style={{ backgroundColor: STATUS_FILL_COLORS[status] }}
-                />
-                {STATUS_LABELS[status]}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1 max-w-36 text-[10px] leading-tight text-slate-400">
-            Zonas de demostración — no representan estados verificados
-          </p>
-        </div>
+        <RiskZonesFilters
+          statusVisibility={statusVisibility}
+          onToggleStatus={onToggleStatus}
+        />
       )}
 
       {!hasValidData && (

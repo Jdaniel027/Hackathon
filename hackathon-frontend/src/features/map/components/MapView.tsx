@@ -1,111 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  GeolocateControl,
-  Map,
-  NavigationControl,
-  setWorkerUrl,
-} from "maplibre-gl";
-import type { GeolocateErrorEvent } from "maplibre-gl";
-import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import "maplibre-gl/dist/maplibre-gl.css";
+import { useCallback, useEffect, useState } from "react";
 
-import { MAP_CONFIG } from "../config/map.config";
-import { MOCK_RISK_ZONES } from "../../risk-zones/data/mockRiskZones";
+import LocateControl from "./LocateControl";
 import MapSelectionPopup from "./MapSelectionPopup";
+import MapStatusOverlay from "./MapStatusOverlay";
+import { useMapInstance } from "../hooks/useMapInstance";
+import { useUserLocation } from "../hooks/useUserLocation";
+import { useUserLocationMarker } from "../hooks/useUserLocationMarker";
 import RiskZonesLayer from "../../risk-zones/components/RiskZonesLayer";
 import StatusTransitionDemo from "../../risk-zones/components/StatusTransitionDemo";
-import { applyZoneStatus } from "../../risk-zones/lib/zoneTransitions";
+import { hasVisibleStatus } from "../../risk-zones/lib/zoneFilters";
+import { useRiskZones } from "../../risk-zones/hooks/useRiskZones";
+import { useZoneFilters } from "../../risk-zones/hooks/useZoneFilters";
 import type { MapSelection } from "../types/selection";
 import type {
-  RiskZoneCollection,
   RiskZoneProperties,
   ZoneStatus,
 } from "../../risk-zones/types/riskZone";
 
-// Configurar el Worker antes de crear el mapa
-setWorkerUrl(workerUrl);
-
+/**
+ * Composición del mapa (F1). Orquesta piezas pequeñas: el ciclo de vida de
+ * MapLibre (`useMapInstance`), los datos de zonas (`useRiskZones`), los dos
+ * filtros de estado (`useZoneFilters`) y la selección activa. Emite la
+ * selección hacia arriba; **no controla el Bottom Sheet**.
+ */
 export default function MapView() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<Map | null>(null);
-  const [mapInstance, setMapInstance] = useState<Map | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
+  const { containerRef, map, ready, error } = useMapInstance();
+  const { zones, transitionFirstZone } = useRiskZones();
+  const { statusVisibility, toggleStatus } = useZoneFilters();
+  const { status: locationStatus, coordinates, locate } = useUserLocation();
 
   // Única fuente de verdad de la selección activa del mapa.
   const [selection, setSelection] = useState<MapSelection | null>(null);
-  const [zonesVisible, setZonesVisible] = useState(true);
 
-  // Zonas en estado local para poder aplicar transiciones mock (F1-04) sin
-  // recrear el mapa: el cambio de `data` se refleja vía `source.setData`.
-  const [zones, setZones] = useState<RiskZoneCollection>(MOCK_RISK_ZONES);
-
+  // Al obtener la posición, centrar el mapa (sin recrearlo).
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!map || !coordinates) return;
+    map.flyTo({ center: coordinates, zoom: Math.max(map.getZoom(), 15) });
+  }, [map, coordinates]);
 
-    let map: Map | null = null;
-    let initError: string | null = null;
-    try {
-      map = new Map({
-        container: containerRef.current,
-        style: MAP_CONFIG.style,
-        center: MAP_CONFIG.center,
-        zoom: MAP_CONFIG.zoom,
-        minZoom: MAP_CONFIG.minZoom,
-        maxZoom: MAP_CONFIG.maxZoom,
-      });
-    } catch (error) {
-      console.error("❌ No se pudo inicializar el mapa:", error);
-      initError =
-        error instanceof Error
-          ? error.message
-          : "No se pudo inicializar el mapa.";
-    }
-
-    // setState en el bloque dominante del efecto (no dentro del catch).
-    setMapError(initError);
-    if (!map) return;
-
-    mapRef.current = map;
-    setMapInstance(map);
-
-    // Zoom (+/-) y brújula para restablecer la orientación al norte.
-    const navigationControl = new NavigationControl({
-      showZoom: true,
-      showCompass: true,
-      visualizePitch: false,
-    });
-    map.addControl(navigationControl, "top-right");
-
-    // Ubicación del usuario: el permiso solo se solicita al pulsar el control.
-    const geolocateControl = new GeolocateControl({
-      positionOptions: { enableHighAccuracy: true },
-      trackUserLocation: true,
-      showUserLocation: true,
-      showAccuracyCircle: true,
-    });
-    map.addControl(geolocateControl, "top-right");
-
-    map.on("load", () => {
-      setMapReady(true);
-    });
-
-    map.on("error", (event) => {
-      console.error("❌ Error de MapLibre:", event.error);
-    });
-
-    // La geolocalización no debe bloquear el mapa si falla o se rechaza el permiso.
-    const handleGeolocateError = (event: GeolocateErrorEvent) => {
-      console.warn("⚠️ No se pudo obtener la ubicación:", event.message);
-    };
-    geolocateControl.on("error", handleGeolocateError);
-
-    return () => {
-      geolocateControl.off("error", handleGeolocateError);
-      map.remove();
-      mapRef.current = null;
-    };
-  }, []);
+  // Punto azul en la posición del usuario mientras esté disponible.
+  useUserLocationMarker(map, coordinates);
 
   const handleSelectZone = useCallback(
     (zone: RiskZoneProperties, lngLat: [number, number]) => {
@@ -118,65 +52,51 @@ export default function MapView() {
     setSelection(null);
   }, []);
 
-  // Al ocultar las zonas, limpiar la selección (su popup dejaría de tener sentido).
-  const handleToggleZones = useCallback(() => {
-    const next = !zonesVisible;
-    setZonesVisible(next);
-    if (!next) setSelection(null);
-  }, [zonesVisible]);
+  // Alterna un filtro; si oculta el estado de la zona seleccionada, limpia la
+  // selección (su popup dejaría de tener sentido). Regla completa: F1-13.
+  const handleToggleStatus = useCallback(
+    (status: ZoneStatus) => {
+      const next = toggleStatus(status);
+      setSelection((current) =>
+        current && !next[current.zone.status] ? null : current,
+      );
+    },
+    [toggleStatus],
+  );
 
-  // Transición mock (F1-04): alterna el estado de la primera zona para
-  // comprobar que color y categoría se actualizan sin recrear el mapa.
-  // No es flujo público; se retirará cuando el backend confirme los estados.
+  // Transición mock (F1-04): alterna el estado de la primera zona sin recrear
+  // el mapa, y reajusta el popup si esa zona estaba seleccionada.
   const handleCycleFirstZone = useCallback(() => {
-    const zone = zones.features[0];
-    if (!zone) return;
-
-    const nextStatus: ZoneStatus =
-      zone.properties.status === "at_risk" ? "flooded" : "at_risk";
-    const updated = applyZoneStatus(zones, zone.properties.id, nextStatus);
-    setZones(updated);
-
-    // Mantener coherente el popup si la zona transicionada estaba seleccionada.
+    const updated = transitionFirstZone();
     setSelection((current) => {
-      if (!current || current.zone.id !== zone.properties.id) return current;
+      if (!current) return current;
       const nextZone = updated.features.find(
         (feature) => feature.properties.id === current.zone.id,
       );
-      return nextZone ? { ...current, zone: nextZone.properties } : current;
+      // Si el nuevo estado queda oculto por su filtro, cerrar el popup.
+      if (!nextZone || !statusVisibility[nextZone.properties.status]) {
+        return null;
+      }
+      return { ...current, zone: nextZone.properties };
     });
-  }, [zones]);
+  }, [transitionFirstZone, statusVisibility]);
 
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {!mapReady && !mapError && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <p className="rounded-md bg-white/90 px-3 py-2 text-xs text-slate-600 shadow ring-1 ring-slate-200">
-            Cargando mapa…
-          </p>
-        </div>
-      )}
-
-      {mapError && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-50/95 p-4">
-          <p role="alert" className="max-w-sm text-center text-sm text-red-700">
-            No se pudo cargar el mapa. {mapError}
-          </p>
-        </div>
-      )}
+      <MapStatusOverlay ready={ready} error={error} />
 
       {/* Fuente de datos separada de la representación: los mocks se reemplazarán por el backend. */}
       <RiskZonesLayer
-        map={mapInstance}
+        map={map}
         data={zones}
-        visible={zonesVisible}
-        onToggleVisibility={handleToggleZones}
+        statusVisibility={statusVisibility}
+        onToggleStatus={handleToggleStatus}
         onSelectZone={handleSelectZone}
       />
 
-      {zonesVisible && (
+      {zones.features.length > 0 && hasVisibleStatus(statusVisibility) && (
         <StatusTransitionDemo
           zones={zones}
           onCycleFirstZone={handleCycleFirstZone}
@@ -184,10 +104,12 @@ export default function MapView() {
       )}
 
       <MapSelectionPopup
-        map={mapInstance}
+        map={map}
         selection={selection}
         onClose={handleCloseSelection}
       />
+
+      <LocateControl status={locationStatus} onLocate={locate} />
     </div>
   );
 }

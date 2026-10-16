@@ -21,6 +21,15 @@ export const STATUS_LABELS: Record<ZoneStatus, string> = {
   flooded: "Zona inundada",
 };
 
+/**
+ * Rótulos cortos de los dos filtros independientes del mapa (F1-06).
+ * Distintos de `STATUS_LABELS` (texto largo para leyenda/detalle).
+ */
+export const FILTER_LABELS: Record<ZoneStatus, string> = {
+  at_risk: "Huracán",
+  flooded: "Inundadas",
+};
+
 export const ZONE_STATUSES: ZoneStatus[] = ["at_risk", "flooded"];
 
 /** Etiquetas del nivel de riesgo histórico (contexto, no estado visual). */
