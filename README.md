@@ -1,4 +1,4 @@
-# (Aún no lo decidimos): Sistema Comunitario de Alerta de Inundaciones
+# SARI: Sistema de Alerta y Reporte de Inundaciones
 
 Una plataforma predictiva y de reporte ciudadano (PWA) para mapear, analizar y prevenir riesgos de inundación urbana en tiempo real. 
 
